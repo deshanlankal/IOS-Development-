@@ -64,7 +64,7 @@ private struct ArcadeHubView: View {
                                 .font(.system(size: 18, weight: .black))
                                 .foregroundStyle(.cyan)
 
-                            Text("NEON ARCADE")
+                            Text("COHNDSE251F iOS Games")
                                 .font(.system(size: 14, weight: .black, design: .monospaced))
                                 .foregroundStyle(.cyan)
                         }
@@ -915,8 +915,12 @@ private final class QuizRushViewModel: ObservableObject {
         "Question \(min(currentQuestionIndex + 1, questions.count)) of \(questions.count)"
     }
 
-    var streakMultiplier: Int {
-        max(1, min(4, (streak / 3) + 1))
+    var correctAnswerMarks: Int {
+        10
+    }
+
+    var wrongAnswerPenalty: Int {
+        10
     }
 
     func startRound() {
@@ -950,11 +954,11 @@ private final class QuizRushViewModel: ObservableObject {
         answerWasCorrect = isCorrect
 
         if isCorrect {
+            score += correctAnswerMarks
             streak += 1
-            score += 100 * streakMultiplier
         } else {
             streak = 0
-            score = max(0, score - 40)
+            score -= wrongAnswerPenalty
             screenShake.toggle()
         }
 
@@ -1015,8 +1019,8 @@ private struct QuizActiveView: View {
     var body: some View {
         VStack(spacing: 16) {
             HStack(spacing: 14) {
-                ScorePanel(title: "Score", value: "\(viewModel.score)", tint: .orange)
-                ScorePanel(title: "Streak", value: "x\(viewModel.streakMultiplier)", tint: .red)
+                ScorePanel(title: "Marks", value: "\(viewModel.score)", tint: .orange)
+                ScorePanel(title: "Per Q", value: "+10 / -10", tint: .red)
             }
 
             HStack(spacing: 8) {
