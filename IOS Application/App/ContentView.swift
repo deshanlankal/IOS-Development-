@@ -587,7 +587,7 @@ private enum LightPhase: Int {
     var cardCount: Int {
         switch self {
         case .level1: 3
-        case .level2: 4
+        case .level2: 6
         case .level3: 6
         case .level4: 9
         }
@@ -596,7 +596,7 @@ private enum LightPhase: Int {
     var columns: Int {
         switch self {
         case .level1: 3
-        case .level2: 2
+        case .level2: 3
         case .level3: 3
         case .level4: 3
         }
@@ -604,19 +604,23 @@ private enum LightPhase: Int {
 
     var reactionWindow: TimeInterval {
         switch self {
-        case .level1: 1.5
-        case .level2: 1.2
-        case .level3: 1.0
-        case .level4: 0.8
+        case .level1: 1.25
+        case .level2: 0.95
+        case .level3: 0.75
+        case .level4: 0.6
         }
     }
 
     var litCardCount: Int {
-        self == .level4 ? 2 : 1
+        switch self {
+        case .level1, .level2: 1
+        case .level3: 2
+        case .level4: 3
+        }
     }
 
     var points: Int {
-        rawValue * 10
+        rawValue * 15
     }
 
     var tint: Color {
@@ -630,10 +634,10 @@ private enum LightPhase: Int {
 
     var caption: String {
         switch self {
-        case .level1: "Soft cyan warmup. Watch for one glowing card."
-        case .level2: "Amber speed-up. The reaction window is tighter."
-        case .level3: "Neon pink spread. Scan the whole board."
-        case .level4: "Electric red overload. Two cards can light at once."
+        case .level1: "Soft cyan warmup. One target, less time to react."
+        case .level2: "Amber 2x3 grid. Six squares arrive early."
+        case .level3: "Neon pink pressure. Two cards can light at once."
+        case .level4: "Electric red overload. Three cards flash at hyper-speed."
         }
     }
 
