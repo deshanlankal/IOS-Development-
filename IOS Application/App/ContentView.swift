@@ -51,6 +51,7 @@ private struct ArcadeHubView: View {
     @AppStorage("quizRushHighScore") private var quizRushHighScore = 0
     @AppStorage("lightItUpRoundLength") private var lightItUpRoundLength = 60
     @State private var isShowingSettings = false
+    @State private var isShowingHighScores = false
     @State private var glowPulse = false
 
     var body: some View {
@@ -82,17 +83,31 @@ private struct ArcadeHubView: View {
 
                     Spacer()
 
-                    Button {
-                        isShowingSettings = true
-                    } label: {
-                        Image(systemName: "gearshape.fill")
-                            .font(.system(size: 18, weight: .bold))
-                            .foregroundStyle(.black)
-                            .frame(width: 46, height: 46)
-                            .background(.cyan, in: RoundedRectangle(cornerRadius: 8))
-                            .shadow(color: .cyan.opacity(0.75), radius: 16)
+                    HStack(spacing: 10) {
+                        Button {
+                            isShowingHighScores = true
+                        } label: {
+                            Image(systemName: "trophy.fill")
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundStyle(.black)
+                                .frame(width: 46, height: 46)
+                                .background(.yellow, in: RoundedRectangle(cornerRadius: 8))
+                                .shadow(color: .yellow.opacity(0.75), radius: 16)
+                        }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            isShowingSettings = true
+                        } label: {
+                            Image(systemName: "gearshape.fill")
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundStyle(.black)
+                                .frame(width: 46, height: 46)
+                                .background(.cyan, in: RoundedRectangle(cornerRadius: 8))
+                                .shadow(color: .cyan.opacity(0.75), radius: 16)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
                 .padding(18)
                 .background(
@@ -146,6 +161,14 @@ private struct ArcadeHubView: View {
             .sheet(isPresented: $isShowingSettings) {
                 SettingsSheet(roundLength: $lightItUpRoundLength)
                     .presentationDetents([.medium])
+            }
+            .sheet(isPresented: $isShowingHighScores) {
+                HighScoresSheet(
+                    tapFrenzyHighScore: tapFrenzyHighScore,
+                    lightItUpHighScore: lightItUpHighScore,
+                    quizRushHighScore: quizRushHighScore
+                )
+                .presentationDetents([.medium])
             }
             .onAppear {
                 withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
@@ -292,6 +315,78 @@ private struct SettingsSheet: View {
             }
             .padding(24)
         }
+    }
+}
+
+private struct HighScoresSheet: View {
+    let tapFrenzyHighScore: Int
+    let lightItUpHighScore: Int
+    let quizRushHighScore: Int
+
+    var body: some View {
+        ZStack {
+            Color(red: 0.03, green: 0.04, blue: 0.10)
+                .ignoresSafeArea()
+
+            VStack(alignment: .leading, spacing: 20) {
+                HStack(spacing: 10) {
+                    Image(systemName: "trophy.fill")
+                        .font(.system(size: 26, weight: .black))
+                        .foregroundStyle(.yellow)
+                        .shadow(color: .yellow.opacity(0.8), radius: 14)
+
+                    Text("High Scores")
+                        .font(.system(size: 30, weight: .black, design: .rounded))
+                        .foregroundStyle(.white)
+                }
+
+                VStack(spacing: 12) {
+                    HighScoreRow(title: "Tap Frenzy", icon: "hand.tap.fill", tint: .cyan, score: tapFrenzyHighScore)
+                    HighScoreRow(title: "Light It Up", icon: "lightbulb.max.fill", tint: .pink, score: lightItUpHighScore)
+                    HighScoreRow(title: "Quiz Rush", icon: "flame.fill", tint: .orange, score: quizRushHighScore)
+                }
+
+                Spacer()
+            }
+            .padding(24)
+        }
+    }
+}
+
+private struct HighScoreRow: View {
+    let title: String
+    let icon: String
+    let tint: Color
+    let score: Int
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Image(systemName: icon)
+                .font(.system(size: 22, weight: .black))
+                .foregroundStyle(tint)
+                .frame(width: 48, height: 48)
+                .background(tint.opacity(0.16), in: RoundedRectangle(cornerRadius: 8))
+                .shadow(color: tint.opacity(0.5), radius: 10)
+
+            Text(title)
+                .font(.system(size: 19, weight: .black, design: .rounded))
+                .foregroundStyle(.white)
+
+            Spacer()
+
+            Text("\(score)")
+                .font(.system(size: 24, weight: .black, design: .monospaced))
+                .foregroundStyle(tint)
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.black.opacity(0.36))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(tint.opacity(0.45), lineWidth: 1)
+                )
+        )
     }
 }
 
