@@ -10,7 +10,66 @@
 		DC906B542FF561020040FABB /* IOS Application.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "IOS Application.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		DC32BACC3000D6D4002F9C46 /* Exceptions for "Features" folder in "IOS Application" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				LightItUp/Controllers/LightItUpController.swift,
+				LightItUp/Models/LightPhase.swift,
+				LightItUp/Views/LevelUpOverlay.swift,
+				LightItUp/Views/LightCardView.swift,
+				LightItUp/Views/LightItUpView.swift,
+				MainMenu/Controllers/ArcadeHubController.swift,
+				MainMenu/Models/ArcadeGame.swift,
+				MainMenu/Views/ArcadeHubView.swift,
+				MainMenu/Views/GameTile.swift,
+				MainMenu/Views/HighScoresSheet.swift,
+				MainMenu/Views/SettingsSheet.swift,
+				QuizRush/Controllers/QuizRushController.swift,
+				QuizRush/Controllers/TriviaService.swift,
+				QuizRush/Models/TriviaModels.swift,
+				QuizRush/Views/QuizActiveView.swift,
+				QuizRush/Views/QuizAnswerButton.swift,
+				QuizRush/Views/QuizErrorView.swift,
+				QuizRush/Views/QuizLoadingView.swift,
+				QuizRush/Views/QuizRushView.swift,
+				TapFrenzy/Controllers/TapFrenzyController.swift,
+				TapFrenzy/Models/TapFrenzyRound.swift,
+				TapFrenzy/Views/TapFrenzyView.swift,
+			);
+			target = DC906B532FF561020040FABB /* IOS Application */;
+		};
+		DC32BACD3000D6D4002F9C46 /* Exceptions for "Shared" folder in "IOS Application" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Views/GameOverView.swift,
+				Views/GameTopBar.swift,
+				Views/ScorePanel.swift,
+				Views/SpaceBackground.swift,
+				Views/SpacerLayout.swift,
+				Views/StarField.swift,
+			);
+			target = DC906B532FF561020040FABB /* IOS Application */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		DC32BAC33000D6D3002F9C46 /* Features */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				DC32BACC3000D6D4002F9C46 /* Exceptions for "Features" folder in "IOS Application" target */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		DC32BACB3000D6D4002F9C46 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				DC32BACD3000D6D4002F9C46 /* Exceptions for "Shared" folder in "IOS Application" target */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
 		DC906B562FF561020040FABB /* IOS Application */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = "IOS Application";
@@ -34,6 +93,8 @@
 			children = (
 				DC906B562FF561020040FABB /* IOS Application */,
 				DC906B552FF561020040FABB /* Products */,
+				DC32BAC33000D6D3002F9C46 /* Features */,
+				DC32BACB3000D6D4002F9C46 /* Shared */,
 			);
 			sourceTree = "<group>";
 		};
@@ -61,6 +122,8 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
+				DC32BAC33000D6D3002F9C46 /* Features */,
+				DC32BACB3000D6D4002F9C46 /* Shared */,
 				DC906B562FF561020040FABB /* IOS Application */,
 			);
 			name = "IOS Application";

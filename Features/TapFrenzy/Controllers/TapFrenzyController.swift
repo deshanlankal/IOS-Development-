@@ -1,0 +1,42 @@
+import Foundation
+
+final class TapFrenzyController: ObservableObject {
+    @Published var score = 0
+    @Published var remainingTime = 10
+    @Published var isGameOver = false
+    @Published private(set) var highScore = UserDefaults.standard.integer(forKey: "tapFrenzyHighScore")
+
+    let round = TapFrenzyRound()
+
+    var isBonusBurstActive: Bool {
+        round.isBonusBurstActive(remainingTime: remainingTime)
+    }
+
+    func tap() {
+        guard !isGameOver else { return }
+        score += isBonusBurstActive ? 2 : 1
+    }
+
+    func tick() {
+        guard !isGameOver else { return }
+
+        if remainingTime > 1 {
+            remainingTime -= 1
+        } else {
+            remainingTime = 0
+            finishGame()
+        }
+    }
+
+    func resetGame() {
+        score = 0
+        remainingTime = round.roundLength
+        isGameOver = false
+    }
+
+    private func finishGame() {
+        isGameOver = true
+        highScore = max(highScore, score)
+        UserDefaults.standard.set(highScore, forKey: "tapFrenzyHighScore")
+    }
+}

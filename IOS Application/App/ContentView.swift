@@ -1,842 +1,129 @@
-//
-//  ContentView.swift
-//  IOS Application
-//
-//  Created by Deshan Lanka on 2026-07-01.
-//
-
 import SwiftUI
+import Charts
+import MapKit
+import CoreLocation
+import UserNotifications
 import Combine
 
 struct ContentView: View {
-    @State private var activeGame: ArcadeGame?
+    @StateObject private var sessionStore = SessionStore()
+    @StateObject private var locationService = LocationService()
+    @StateObject private var notificationService = NotificationService()
 
     var body: some View {
-        ZStack {
-            SpaceBackground()
-
-            switch activeGame {
-            case .tapFrenzy:
-                TapFrenzyView {
-                    activeGame = nil
-                }
-            case .lightItUp:
-                LightItUpView {
-                    activeGame = nil
-                }
-            case .quizRush:
-                QuizRushView {
-                    activeGame = nil
-                }
-            case nil:
-                ArcadeHubView { game in
-                    activeGame = game
-                }
-            }
-        }
+        AppShellView()
+            .environmentObject(sessionStore)
+            .environmentObject(locationService)
+            .environmentObject(notificationService)
     }
 }
 
-private enum ArcadeGame {
+// MARK: - Models
+
+enum GameMode: String, CaseIterable, Codable, Identifiable {
     case tapFrenzy
     case lightItUp
     case quizRush
-}
 
-private struct ArcadeHubView: View {
-    let startGame: (ArcadeGame) -> Void
+    var id: String { rawValue }
 
-    @AppStorage("tapFrenzyHighScore") private var tapFrenzyHighScore = 0
-    @AppStorage("lightItUpHighScore") private var lightItUpHighScore = 0
-    @AppStorage("quizRushHighScore") private var quizRushHighScore = 0
-    @AppStorage("lightItUpRoundLength") private var lightItUpRoundLength = 60
-    @State private var isShowingSettings = false
-    @State private var isShowingHighScores = false
-    @State private var glowPulse = false
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 22) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "gamecontroller.fill")
-                                .font(.system(size: 18, weight: .black))
-                                .foregroundStyle(.cyan)
-
-                            Text("COHNDSE251F iOS Games")
-                                .font(.system(size: 14, weight: .black, design: .monospaced))
-                                .foregroundStyle(.cyan)
-                        }
-
-                        Text("Select Stage")
-                            .font(.system(size: 38, weight: .black, design: .rounded))
-                            .foregroundStyle(
-                                LinearGradient(colors: [.cyan, .pink, .orange], startPoint: .leading, endPoint: .trailing)
-                            )
-                            .shadow(color: .cyan.opacity(0.5), radius: 14)
-
-                        Text("HIGH-SCORE ZONE")
-                            .font(.system(size: 12, weight: .black, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.58))
-                    }
-
-                    Spacer()
-
-                    HStack(spacing: 10) {
-                        Button {
-                            isShowingHighScores = true
-                        } label: {
-                            Image(systemName: "trophy.fill")
-                                .font(.system(size: 18, weight: .bold))
-                                .foregroundStyle(.black)
-                                .frame(width: 46, height: 46)
-                                .background(.yellow, in: RoundedRectangle(cornerRadius: 8))
-                                .shadow(color: .yellow.opacity(0.75), radius: 16)
-                        }
-                        .buttonStyle(.plain)
-
-                        Button {
-                            isShowingSettings = true
-                        } label: {
-                            Image(systemName: "gearshape.fill")
-                                .font(.system(size: 18, weight: .bold))
-                                .foregroundStyle(.black)
-                                .frame(width: 46, height: 46)
-                                .background(.cyan, in: RoundedRectangle(cornerRadius: 8))
-                                .shadow(color: .cyan.opacity(0.75), radius: 16)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(18)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.black.opacity(0.36))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(.cyan.opacity(0.38), lineWidth: 1)
-                        )
-                )
-
-                VStack(spacing: 14) {
-                    GameTile(
-                        title: "Tap Frenzy",
-                        subtitle: "10 seconds. One button. Pure speed.",
-                        icon: "hand.tap.fill",
-                        tint: .cyan,
-                        highScore: tapFrenzyHighScore,
-                        isGlowing: false
-                    ) {
-                        startGame(.tapFrenzy)
-                    }
-
-                    GameTile(
-                        title: "Light It Up",
-                        subtitle: "Hunt glowing cards before they fade.",
-                        icon: "lightbulb.max.fill",
-                        tint: .pink,
-                        highScore: lightItUpHighScore,
-                        isGlowing: glowPulse
-                    ) {
-                        startGame(.lightItUp)
-                    }
-
-                    GameTile(
-                        title: "Quiz Rush",
-                        subtitle: "Live trivia with streak multipliers.",
-                        icon: "flame.fill",
-                        tint: .orange,
-                        highScore: quizRushHighScore,
-                        isGlowing: false
-                    ) {
-                        startGame(.quizRush)
-                    }
-                }
-
-                Spacer(minLength: 10)
-            }
-            .padding(.horizontal, 24)
-            .padding(.top, 34)
-            .sheet(isPresented: $isShowingSettings) {
-                SettingsSheet(roundLength: $lightItUpRoundLength)
-                    .presentationDetents([.medium])
-            }
-            .sheet(isPresented: $isShowingHighScores) {
-                HighScoresSheet(
-                    tapFrenzyHighScore: tapFrenzyHighScore,
-                    lightItUpHighScore: lightItUpHighScore,
-                    quizRushHighScore: quizRushHighScore
-                )
-                .presentationDetents([.medium])
-            }
-            .onAppear {
-                withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
-                    glowPulse = true
-                }
-            }
-        }
-    }
-}
-
-private struct GameTile: View {
-    let title: String
-    let subtitle: String
-    let icon: String
-    let tint: Color
-    let highScore: Int
-    let isGlowing: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            ZStack(alignment: .trailing) {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(
-                        LinearGradient(
-                            colors: [tint.opacity(0.34), Color.black.opacity(0.78)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .overlay(alignment: .topLeading) {
-                        Rectangle()
-                            .fill(tint.opacity(0.95))
-                            .frame(width: 6)
-                    }
-                    .overlay(alignment: .bottomTrailing) {
-                        Image(systemName: icon)
-                            .font(.system(size: 82, weight: .black))
-                            .foregroundStyle(tint.opacity(0.12))
-                            .offset(x: 12, y: 14)
-                    }
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(tint.opacity(isGlowing ? 1.0 : 0.62), lineWidth: isGlowing ? 2 : 1)
-                    )
-
-                HStack(spacing: 16) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.black.opacity(0.48))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(tint.opacity(0.8), lineWidth: 1)
-                            )
-
-                        Image(systemName: icon)
-                            .font(.system(size: 30, weight: .black))
-                            .foregroundStyle(tint)
-                            .shadow(color: tint.opacity(0.85), radius: 10)
-                    }
-                    .frame(width: 60, height: 60)
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 8) {
-                            Text(title.uppercased())
-                                .font(.system(size: 21, weight: .black, design: .rounded))
-                                .foregroundStyle(tint)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.74)
-
-                            Spacer(minLength: 6)
-
-                            Text("BEST \(highScore)")
-                                .font(.system(size: 11, weight: .black, design: .monospaced))
-                                .foregroundStyle(.black)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 5)
-                                .background(tint, in: Capsule())
-                        }
-
-                        Text(subtitle)
-                            .font(.system(size: 13, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white.opacity(0.78))
-                            .lineLimit(2)
-
-                        HStack(spacing: 7) {
-                            ForEach(0..<3, id: \.self) { index in
-                                Capsule()
-                                    .fill(index == 0 ? tint : tint.opacity(0.32))
-                                    .frame(width: index == 0 ? 24 : 11, height: 5)
-                            }
-
-                            Spacer()
-
-                            Image(systemName: "play.fill")
-                                .font(.system(size: 12, weight: .black))
-                                .foregroundStyle(.black)
-                                .frame(width: 28, height: 28)
-                                .background(tint, in: Circle())
-                        }
-                    }
-                }
-                .padding(18)
-            }
-            .frame(maxWidth: .infinity, minHeight: 126)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .shadow(color: tint.opacity(isGlowing ? 0.55 : 0.28), radius: isGlowing ? 26 : 16, y: 10)
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-private struct SettingsSheet: View {
-    @Binding var roundLength: Int
-
-    private let options = [30, 60, 90]
-
-    var body: some View {
-        ZStack {
-            Color(red: 0.03, green: 0.04, blue: 0.10)
-                .ignoresSafeArea()
-
-            VStack(alignment: .leading, spacing: 22) {
-                Text("Settings")
-                    .font(.system(size: 30, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
-
-                Text("Light It Up Round")
-                    .font(.system(size: 13, weight: .black, design: .monospaced))
-                    .foregroundStyle(.cyan)
-
-                Picker("Round Length", selection: $roundLength) {
-                    ForEach(options, id: \.self) { option in
-                        Text("\(option)s").tag(option)
-                    }
-                }
-                .pickerStyle(.segmented)
-
-                Text("Shorter rounds ramp faster. Longer rounds keep the final level running longer.")
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.65))
-
-                Spacer()
-            }
-            .padding(24)
-        }
-    }
-}
-
-private struct HighScoresSheet: View {
-    let tapFrenzyHighScore: Int
-    let lightItUpHighScore: Int
-    let quizRushHighScore: Int
-
-    var body: some View {
-        ZStack {
-            Color(red: 0.03, green: 0.04, blue: 0.10)
-                .ignoresSafeArea()
-
-            VStack(alignment: .leading, spacing: 20) {
-                HStack(spacing: 10) {
-                    Image(systemName: "trophy.fill")
-                        .font(.system(size: 26, weight: .black))
-                        .foregroundStyle(.yellow)
-                        .shadow(color: .yellow.opacity(0.8), radius: 14)
-
-                    Text("High Scores")
-                        .font(.system(size: 30, weight: .black, design: .rounded))
-                        .foregroundStyle(.white)
-                }
-
-                VStack(spacing: 12) {
-                    HighScoreRow(title: "Tap Frenzy", icon: "hand.tap.fill", tint: .cyan, score: tapFrenzyHighScore)
-                    HighScoreRow(title: "Light It Up", icon: "lightbulb.max.fill", tint: .pink, score: lightItUpHighScore)
-                    HighScoreRow(title: "Quiz Rush", icon: "flame.fill", tint: .orange, score: quizRushHighScore)
-                }
-
-                Spacer()
-            }
-            .padding(24)
-        }
-    }
-}
-
-private struct HighScoreRow: View {
-    let title: String
-    let icon: String
-    let tint: Color
-    let score: Int
-
-    var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: icon)
-                .font(.system(size: 22, weight: .black))
-                .foregroundStyle(tint)
-                .frame(width: 48, height: 48)
-                .background(tint.opacity(0.16), in: RoundedRectangle(cornerRadius: 8))
-                .shadow(color: tint.opacity(0.5), radius: 10)
-
-            Text(title)
-                .font(.system(size: 19, weight: .black, design: .rounded))
-                .foregroundStyle(.white)
-
-            Spacer()
-
-            Text("\(score)")
-                .font(.system(size: 24, weight: .black, design: .monospaced))
-                .foregroundStyle(tint)
-        }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color.black.opacity(0.36))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(tint.opacity(0.45), lineWidth: 1)
-                )
-        )
-    }
-}
-
-private struct TapFrenzyView: View {
-    let returnToMenu: () -> Void
-
-    @AppStorage("tapFrenzyHighScore") private var highScore = 0
-    @State private var score = 0
-    @State private var remainingTime = 10
-    @State private var isGameOver = false
-
-    private let roundLength = 10
-    private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
-
-    private var isBonusBurstActive: Bool {
-        remainingTime == 5 || remainingTime == 4
-    }
-
-    private var tapButtonSize: CGFloat {
-        let progress = CGFloat(remainingTime) / CGFloat(roundLength)
-        return 86 + (progress * 164)
-    }
-
-    var body: some View {
-        VStack(spacing: 24) {
-            GameTopBar(title: "TAP FRENZY", icon: "bolt.fill", tint: isBonusBurstActive ? .yellow : .cyan, returnToMenu: returnToMenu)
-
-            if isGameOver {
-                GameOverView(title: "GAME OVER", score: score, highScore: highScore, playAgain: resetGame, returnToMenu: returnToMenu)
-            } else {
-                gameContent
-            }
-        }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 22)
-        .onReceive(timer) { _ in
-            guard !isGameOver else { return }
-
-            if remainingTime > 1 {
-                remainingTime -= 1
-            } else {
-                remainingTime = 0
-                finishGame()
-            }
-        }
-        .onAppear(perform: resetGame)
-    }
-
-    private var gameContent: some View {
-        VStack(spacing: 20) {
-            HStack(spacing: 14) {
-                ScorePanel(title: "Score", value: "\(score)", tint: .cyan)
-                ScorePanel(title: "Time", value: "\(remainingTime)s", tint: remainingTime <= 3 ? .orange : .mint)
-            }
-
-            Text(isBonusBurstActive ? "DOUBLE POINTS" : "TAP AS FAST AS YOU CAN")
-                .font(.system(size: 15, weight: .black, design: .monospaced))
-                .foregroundStyle(isBonusBurstActive ? .yellow : .cyan)
-                .frame(height: 26)
-
-            Spacer(minLength: 18)
-
-            Button {
-                score += isBonusBurstActive ? 2 : 1
-            } label: {
-                Text("TAP")
-                    .font(.system(size: min(44, tapButtonSize * 0.28), weight: .black, design: .rounded))
-                    .foregroundStyle(.black)
-                    .frame(width: tapButtonSize, height: tapButtonSize)
-                    .background(
-                        Circle()
-                            .fill(isBonusBurstActive ? .yellow : .cyan)
-                            .shadow(color: isBonusBurstActive ? .yellow.opacity(0.8) : .cyan.opacity(0.7), radius: 24)
-                    )
-                    .overlay(
-                        Circle()
-                            .stroke(.white.opacity(0.9), lineWidth: 3)
-                    )
-            }
-            .buttonStyle(.plain)
-            .disabled(isGameOver)
-            .animation(.spring(response: 0.25, dampingFraction: 0.75), value: tapButtonSize)
-            .animation(.easeInOut(duration: 0.2), value: isBonusBurstActive)
-
-            Spacer(minLength: 18)
-
-            Text("Button shrinks as the timer falls. Bonus burst gives +2 per tap.")
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundStyle(.white.opacity(0.62))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 18)
-        }
-    }
-
-    private func finishGame() {
-        isGameOver = true
-        highScore = max(highScore, score)
-    }
-
-    private func resetGame() {
-        score = 0
-        remainingTime = roundLength
-        isGameOver = false
-    }
-}
-
-private struct LightItUpView: View {
-    let returnToMenu: () -> Void
-
-    @AppStorage("lightItUpHighScore") private var highScore = 0
-    @AppStorage("lightItUpRoundLength") private var roundLength = 60
-    @State private var score = 0
-    @State private var lives = 3
-    @State private var remainingTime = 60
-    @State private var isGameOver = false
-    @State private var activeCards: Set<Int> = []
-    @State private var litDeadline = Date()
-    @State private var nextSpawnTime = Date()
-    @State private var roundStartTime = Date()
-    @State private var currentPhase = LightPhase.level1
-    @State private var levelBanner: String?
-    @State private var boardShake = false
-
-    private let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
-
-    private var columns: [GridItem] {
-        Array(repeating: GridItem(.flexible(), spacing: 12), count: currentPhase.columns)
-    }
-
-    var body: some View {
-        VStack(spacing: 18) {
-            GameTopBar(title: "LIGHT IT UP", icon: "lightbulb.max.fill", tint: currentPhase.tint, returnToMenu: returnToMenu)
-
-            if isGameOver {
-                GameOverView(title: lives == 0 ? "LIGHTS OUT" : "TIME UP", score: score, highScore: highScore, playAgain: resetGame, returnToMenu: returnToMenu)
-            } else {
-                gameContent
-            }
-        }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 22)
-        .offset(x: boardShake ? -8 : 0)
-        .animation(.default.repeatCount(3, autoreverses: true), value: boardShake)
-        .overlay(alignment: .center) {
-            if let levelBanner {
-                LevelUpOverlay(text: levelBanner, tint: currentPhase.tint)
-                    .transition(.scale.combined(with: .opacity))
-            }
-        }
-        .onAppear(perform: resetGame)
-        .onReceive(timer) { now in
-            updateGame(now: now)
-        }
-    }
-
-    private var gameContent: some View {
-        VStack(spacing: 16) {
-            HStack(spacing: 14) {
-                ScorePanel(title: "Score", value: "\(score)", tint: currentPhase.tint)
-                ScorePanel(title: "Time", value: "\(remainingTime)s", tint: remainingTime <= 5 ? .orange : .mint)
-            }
-
-            HStack(spacing: 8) {
-                ForEach(0..<3, id: \.self) { index in
-                    Image(systemName: index < lives ? "heart.fill" : "heart.slash.fill")
-                        .font(.system(size: 22, weight: .black))
-                        .foregroundStyle(index < lives ? .red : .gray)
-                        .shadow(color: index < lives ? .red.opacity(0.75) : .clear, radius: 9)
-                }
-
-                Spacer()
-
-                Text("LEVEL \(currentPhase.rawValue)")
-                    .font(.system(size: 14, weight: .black, design: .monospaced))
-                    .foregroundStyle(currentPhase.tint)
-            }
-            .frame(height: 28)
-
-            LazyVGrid(columns: columns, spacing: 12) {
-                ForEach(0..<currentPhase.cardCount, id: \.self) { cardID in
-                    LightCardView(isLit: activeCards.contains(cardID), tint: currentPhase.tint) {
-                        tapCard(cardID)
-                    }
-                }
-            }
-            .animation(.spring(response: 0.28, dampingFraction: 0.82), value: currentPhase)
-            .animation(.easeInOut(duration: 0.12), value: activeCards)
-
-            Text(currentPhase.caption)
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundStyle(.white.opacity(0.62))
-                .multilineTextAlignment(.center)
-                .frame(height: 38)
-        }
-    }
-
-    private func updateGame(now: Date) {
-        guard !isGameOver else { return }
-
-        let elapsed = now.timeIntervalSince(roundStartTime)
-        remainingTime = max(0, roundLength - Int(elapsed.rounded(.down)))
-
-        if remainingTime <= 0 {
-            finishGame()
-            return
-        }
-
-        let nextPhase = LightPhase.phase(for: elapsed, roundLength: roundLength)
-        if nextPhase != currentPhase {
-            withAnimation(.spring(response: 0.25, dampingFraction: 0.75)) {
-                currentPhase = nextPhase
-                activeCards = []
-                levelBanner = "LEVEL \(nextPhase.rawValue): SPEED UP"
-            }
-            nextSpawnTime = now.addingTimeInterval(0.35)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
-                withAnimation(.easeOut(duration: 0.2)) {
-                    levelBanner = nil
-                }
-            }
-        }
-
-        if !activeCards.isEmpty && now >= litDeadline {
-            loseLife()
-            activeCards = []
-            nextSpawnTime = now.addingTimeInterval(0.25)
-        }
-
-        if activeCards.isEmpty && now >= nextSpawnTime {
-            spawnCards(now: now)
-        }
-    }
-
-    private func tapCard(_ cardID: Int) {
-        guard !isGameOver else { return }
-
-        if activeCards.contains(cardID) {
-            score += currentPhase.points
-            activeCards.remove(cardID)
-
-            if activeCards.isEmpty {
-                nextSpawnTime = Date().addingTimeInterval(0.18)
-            }
-        } else {
-            loseLife()
-        }
-    }
-
-    private func spawnCards(now: Date) {
-        let cardCount = currentPhase.cardCount
-        let lightCount = min(currentPhase.litCardCount, cardCount)
-        activeCards = Set((0..<cardCount).shuffled().prefix(lightCount))
-        litDeadline = now.addingTimeInterval(currentPhase.reactionWindow)
-    }
-
-    private func loseLife() {
-        guard lives > 0 else { return }
-
-        lives -= 1
-        boardShake.toggle()
-
-        if lives == 0 {
-            finishGame()
-        }
-    }
-
-    private func finishGame() {
-        isGameOver = true
-        activeCards = []
-        highScore = max(highScore, score)
-    }
-
-    private func resetGame() {
-        score = 0
-        lives = 3
-        remainingTime = roundLength
-        isGameOver = false
-        activeCards = []
-        currentPhase = .level1
-        levelBanner = nil
-        roundStartTime = Date()
-        nextSpawnTime = Date().addingTimeInterval(0.45)
-        litDeadline = Date()
-    }
-}
-
-private enum LightPhase: Int {
-    case level1 = 1
-    case level2 = 2
-    case level3 = 3
-    case level4 = 4
-
-    var cardCount: Int {
+    var title: String {
         switch self {
-        case .level1: 3
-        case .level2: 6
-        case .level3: 6
-        case .level4: 9
+        case .tapFrenzy: "TapFrenzy"
+        case .lightItUp: "LightItUp"
+        case .quizRush: "QuizRush"
         }
     }
 
-    var columns: Int {
+    var displayTitle: String {
         switch self {
-        case .level1: 3
-        case .level2: 3
-        case .level3: 3
-        case .level4: 3
+        case .tapFrenzy: "Tap Frenzy"
+        case .lightItUp: "Light It Up"
+        case .quizRush: "Quiz Rush"
         }
     }
 
-    var reactionWindow: TimeInterval {
+    var subtitle: String {
         switch self {
-        case .level1: 1.25
-        case .level2: 0.95
-        case .level3: 0.75
-        case .level4: 0.6
+        case .tapFrenzy: "Tap as fast as possible before the timer ends."
+        case .lightItUp: "Hit glowing tiles before they fade away."
+        case .quizRush: "Answer multiple-choice trivia for marks."
         }
     }
 
-    var litCardCount: Int {
+    var symbolName: String {
         switch self {
-        case .level1, .level2: 1
-        case .level3: 2
-        case .level4: 3
+        case .tapFrenzy: "hand.tap.fill"
+        case .lightItUp: "lightbulb.max.fill"
+        case .quizRush: "questionmark.circle.fill"
         }
-    }
-
-    var points: Int {
-        rawValue * 15
     }
 
     var tint: Color {
         switch self {
-        case .level1: .cyan
-        case .level2: .orange
-        case .level3: .pink
-        case .level4: .red
-        }
-    }
-
-    var caption: String {
-        switch self {
-        case .level1: "Soft cyan warmup. One target, less time to react."
-        case .level2: "Amber 2x3 grid. Six squares arrive early."
-        case .level3: "Neon pink pressure. Two cards can light at once."
-        case .level4: "Electric red overload. Three cards flash at hyper-speed."
-        }
-    }
-
-    static func phase(for elapsed: TimeInterval, roundLength: Int) -> LightPhase {
-        let segment = max(TimeInterval(roundLength) / 4.0, 1.0)
-
-        switch elapsed {
-        case 0..<segment:
-            return .level1
-        case segment..<(segment * 2):
-            return .level2
-        case (segment * 2)..<(segment * 3):
-            return .level3
-        default:
-            return .level4
+        case .tapFrenzy: .cyan
+        case .lightItUp: .yellow
+        case .quizRush: .orange
         }
     }
 }
 
-private struct LightCardView: View {
-    let isLit: Bool
-    let tint: Color
-    let action: () -> Void
+struct GameSession: Identifiable, Codable, Hashable {
+    let id: UUID
+    let mode: GameMode
+    let score: Int
+    let timestamp: Date
+    let latitude: Double
+    let longitude: Double
 
-    var body: some View {
-        Button(action: action) {
-            RoundedRectangle(cornerRadius: 8)
-                .fill(isLit ? tint : .white.opacity(0.09))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(isLit ? .white.opacity(0.95) : .white.opacity(0.14), lineWidth: isLit ? 2 : 1)
-                )
-                .shadow(color: isLit ? tint.opacity(0.85) : .clear, radius: 20)
-                .scaleEffect(isLit ? 1.04 : 1.0)
-                .aspectRatio(1, contentMode: .fit)
-                .overlay {
-                    Image(systemName: isLit ? "sparkle" : "circle.grid.cross")
-                        .font(.system(size: 26, weight: .black))
-                        .foregroundStyle(isLit ? .black.opacity(0.78) : .white.opacity(0.18))
-                }
-        }
-        .buttonStyle(.plain)
+    init(id: UUID = UUID(), mode: GameMode, score: Int, timestamp: Date = Date(), latitude: Double, longitude: Double) {
+        self.id = id
+        self.mode = mode
+        self.score = score
+        self.timestamp = timestamp
+        self.latitude = latitude
+        self.longitude = longitude
+    }
+
+    var coordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
+
+    var shareText: String {
+        "I just scored \(score) in \(mode.displayTitle) on PlayHub."
     }
 }
 
-private struct LevelUpOverlay: View {
-    let text: String
-    let tint: Color
+struct ModeStats: Identifiable {
+    let mode: GameMode
+    let sessions: [GameSession]
 
-    var body: some View {
-        Text(text)
-            .font(.system(size: 26, weight: .black, design: .rounded))
-            .foregroundStyle(.black)
-            .padding(.horizontal, 24)
-            .padding(.vertical, 16)
-            .background(tint, in: RoundedRectangle(cornerRadius: 8))
-            .shadow(color: tint.opacity(0.85), radius: 28)
-            .padding(.horizontal, 24)
+    var id: GameMode { mode }
+    var plays: Int { sessions.count }
+    var totalScore: Int { sessions.reduce(0) { $0 + $1.score } }
+    var bestScore: Int { sessions.map(\.score).max() ?? 0 }
+    var averageScore: Int { plays == 0 ? 0 : totalScore / plays }
+}
+
+struct TriviaQuestion: Identifiable, Codable {
+    let id: UUID
+    let prompt: String
+    let correctAnswer: String
+    let answers: [String]
+
+    init(id: UUID = UUID(), prompt: String, correctAnswer: String, answers: [String]) {
+        self.id = id
+        self.prompt = prompt
+        self.correctAnswer = correctAnswer
+        self.answers = answers
     }
 }
 
-private struct QuizRushView: View {
-    let returnToMenu: () -> Void
-
-    @StateObject private var viewModel = QuizRushViewModel()
-
-    var body: some View {
-        VStack(spacing: 18) {
-            GameTopBar(title: "QUIZ RUSH", icon: "flame.fill", tint: .orange, returnToMenu: returnToMenu)
-
-            switch viewModel.state {
-            case .loading:
-                QuizLoadingView()
-            case .active:
-                QuizActiveView(viewModel: viewModel)
-            case .finished:
-                GameOverView(title: "QUIZ COMPLETE", score: viewModel.score, highScore: viewModel.highScore, playAgain: viewModel.startRound, returnToMenu: returnToMenu)
-            case .failed(let message):
-                QuizErrorView(message: message, retry: viewModel.startRound)
-            }
-        }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 22)
-        .task {
-            if viewModel.questions.isEmpty {
-                await viewModel.loadRound()
-            }
-        }
-    }
+private struct TriviaAPIResponse: Decodable {
+    let results: [TriviaAPIQuestion]
 }
 
-private enum QuizRushState: Equatable {
-    case loading
-    case active
-    case finished
-    case failed(String)
-}
-
-private struct TriviaResponse: Codable {
-    let results: [TriviaQuestion]
-}
-
-private struct TriviaQuestion: Codable, Identifiable {
-    let id = UUID()
+private struct TriviaAPIQuestion: Decodable {
     let question: String
     let correctAnswer: String
     let incorrectAnswers: [String]
@@ -846,324 +133,183 @@ private struct TriviaQuestion: Codable, Identifiable {
         case correctAnswer = "correct_answer"
         case incorrectAnswers = "incorrect_answers"
     }
+}
 
-    var decodedQuestion: String {
-        question.decodedHTML
+// MARK: - Services
+
+@MainActor
+final class SessionStore: ObservableObject {
+    @Published private(set) var sessions: [GameSession] = []
+
+    private let storageKey = "playHubGameSessions"
+
+    init() {
+        load()
     }
 
-    var decodedCorrectAnswer: String {
-        correctAnswer.decodedHTML
+    func record(mode: GameMode, score: Int, coordinate: CLLocationCoordinate2D) -> GameSession {
+        let session = GameSession(mode: mode, score: score, latitude: coordinate.latitude, longitude: coordinate.longitude)
+        sessions.insert(session, at: 0)
+        save()
+        return session
     }
 
-    var shuffledAnswers: [String] {
-        ([correctAnswer] + incorrectAnswers).map(\.decodedHTML).shuffled()
+    func reset() {
+        sessions.removeAll()
+        UserDefaults.standard.removeObject(forKey: storageKey)
+    }
+
+    func stats(for mode: GameMode) -> ModeStats {
+        ModeStats(mode: mode, sessions: sessions.filter { $0.mode == mode })
+    }
+
+    var allStats: [ModeStats] {
+        GameMode.allCases.map { stats(for: $0) }
+    }
+
+    var totalScore: Int {
+        sessions.reduce(0) { $0 + $1.score }
+    }
+
+    var bestSession: GameSession? {
+        sessions.max { $0.score < $1.score }
+    }
+
+    private func load() {
+        guard let data = UserDefaults.standard.data(forKey: storageKey) else { return }
+        sessions = (try? JSONDecoder().decode([GameSession].self, from: data)) ?? []
+    }
+
+    private func save() {
+        guard let data = try? JSONEncoder().encode(sessions) else { return }
+        UserDefaults.standard.set(data, forKey: storageKey)
     }
 }
 
-private struct QuizQuestionRound: Identifiable {
-    let id = UUID()
-    let prompt: String
-    let correctAnswer: String
-    let answers: [String]
-}
+@MainActor
+final class LocationService: NSObject, ObservableObject, CLLocationManagerDelegate {
+    @Published var authorizationMessage = "Location is optional. Scores use your current coordinate when available."
 
-private struct TriviaService {
-    func fetchQuestions() async throws -> [QuizQuestionRound] {
-        let url = URL(string: "https://opentdb.com/api.php?amount=10&type=multiple")!
-        let (data, response) = try await URLSession.shared.data(from: url)
+    private let manager = CLLocationManager()
+    private let fallbackCoordinate = CLLocationCoordinate2D(latitude: 6.9271, longitude: 79.8612)
 
-        guard let httpResponse = response as? HTTPURLResponse, 200..<300 ~= httpResponse.statusCode else {
-            throw URLError(.badServerResponse)
+    override init() {
+        super.init()
+        manager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+    }
+
+    var currentCoordinate: CLLocationCoordinate2D {
+        manager.location?.coordinate ?? fallbackCoordinate
+    }
+
+    func requestPermissionIfConfigured() {
+        guard Bundle.main.object(forInfoDictionaryKey: "NSLocationWhenInUseUsageDescription") != nil else {
+            authorizationMessage = "Add NSLocationWhenInUseUsageDescription to use live location. Using fallback coordinates for now."
+            return
         }
 
-        let triviaResponse = try JSONDecoder().decode(TriviaResponse.self, from: data)
+        manager.requestWhenInUseAuthorization()
+        manager.requestLocation()
+    }
 
-        guard !triviaResponse.results.isEmpty else {
-            throw URLError(.zeroByteResource)
-        }
+    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) { }
 
-        return triviaResponse.results.map { question in
-            QuizQuestionRound(
-                prompt: question.decodedQuestion,
-                correctAnswer: question.decodedCorrectAnswer,
-                answers: question.shuffledAnswers
-            )
+    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        Task { @MainActor in
+            switch manager.authorizationStatus {
+            case .authorizedAlways, .authorizedWhenInUse:
+                authorizationMessage = "Location enabled. New results can use your current coordinate."
+                manager.requestLocation()
+            case .denied, .restricted:
+                authorizationMessage = "Location is disabled. New results use fallback coordinates."
+            case .notDetermined:
+                authorizationMessage = "Location permission has not been requested."
+            @unknown default:
+                authorizationMessage = "Location status is unavailable."
+            }
         }
     }
 }
 
 @MainActor
-private final class QuizRushViewModel: ObservableObject {
-    @AppStorage("quizRushHighScore") var highScore = 0
-    @Published var state: QuizRushState = .loading
-    @Published var questions: [QuizQuestionRound] = []
-    @Published var currentQuestionIndex = 0
-    @Published var score = 0
-    @Published var streak = 0
-    @Published var selectedAnswer: String?
-    @Published var answerWasCorrect: Bool?
-    @Published var screenShake = false
+final class NotificationService: ObservableObject {
+    @Published var statusMessage = "Daily reminders are off."
 
-    private let service = TriviaService()
+    private let reminderIdentifier = "playHubDailyReminder"
 
-    var currentQuestion: QuizQuestionRound? {
-        guard questions.indices.contains(currentQuestionIndex) else { return nil }
-        return questions[currentQuestionIndex]
-    }
+    func scheduleDailyReminder(at date: Date) async {
+        do {
+            let center = UNUserNotificationCenter.current()
+            let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
 
-    var questionProgressText: String {
-        "Question \(min(currentQuestionIndex + 1, questions.count)) of \(questions.count)"
-    }
+            guard granted else {
+                statusMessage = "Notification permission was not granted."
+                return
+            }
 
-    var correctAnswerMarks: Int {
-        10
-    }
+            center.removePendingNotificationRequests(withIdentifiers: [reminderIdentifier])
 
-    var wrongAnswerPenalty: Int {
-        10
-    }
+            let content = UNMutableNotificationContent()
+            content.title = "PlayHub challenge"
+            content.body = "Play a quick round and beat your best score."
+            content.sound = .default
 
-    func startRound() {
-        Task {
-            await loadRound()
+            let components = Calendar.current.dateComponents([.hour, .minute], from: date)
+            let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
+            let request = UNNotificationRequest(identifier: reminderIdentifier, content: content, trigger: trigger)
+
+            try await center.add(request)
+            statusMessage = "Daily reminder scheduled."
+        } catch {
+            statusMessage = "Could not schedule reminder."
         }
     }
 
-    func loadRound() async {
-        state = .loading
-        questions = []
-        currentQuestionIndex = 0
-        score = 0
-        streak = 0
-        selectedAnswer = nil
-        answerWasCorrect = nil
+    func cancelDailyReminder() {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [reminderIdentifier])
+        statusMessage = "Daily reminders are off."
+    }
+}
+
+struct TriviaService {
+    func fetchQuestions() async -> [TriviaQuestion] {
+        guard let url = URL(string: "https://opentdb.com/api.php?amount=5&type=multiple") else {
+            return Self.fallbackQuestions
+        }
 
         do {
-            questions = try await service.fetchQuestions()
-            state = .active
+            let (data, response) = try await URLSession.shared.data(from: url)
+            guard let httpResponse = response as? HTTPURLResponse, 200..<300 ~= httpResponse.statusCode else {
+                return Self.fallbackQuestions
+            }
+
+            let decoded = try JSONDecoder().decode(TriviaAPIResponse.self, from: data)
+            let questions = decoded.results.map { apiQuestion in
+                let correct = apiQuestion.correctAnswer.decodedHTML
+                let answers = ([apiQuestion.correctAnswer] + apiQuestion.incorrectAnswers)
+                    .map(\.decodedHTML)
+                    .shuffled()
+
+                return TriviaQuestion(prompt: apiQuestion.question.decodedHTML, correctAnswer: correct, answers: answers)
+            }
+
+            return questions.isEmpty ? Self.fallbackQuestions : questions
         } catch {
-            state = .failed("Could not download trivia. Check your connection and try again.")
+            return Self.fallbackQuestions
         }
     }
 
-    func chooseAnswer(_ answer: String) {
-        guard state == .active, selectedAnswer == nil, let question = currentQuestion else { return }
-
-        let isCorrect = answer == question.correctAnswer
-        selectedAnswer = answer
-        answerWasCorrect = isCorrect
-
-        if isCorrect {
-            score += correctAnswerMarks
-            streak += 1
-        } else {
-            streak = 0
-            score -= wrongAnswerPenalty
-            screenShake.toggle()
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) { [weak self] in
-            self?.advanceQuestion()
-        }
-    }
-
-    private func advanceQuestion() {
-        selectedAnswer = nil
-        answerWasCorrect = nil
-
-        if currentQuestionIndex + 1 < questions.count {
-            withAnimation(.easeInOut(duration: 0.18)) {
-                currentQuestionIndex += 1
-            }
-        } else {
-            highScore = max(highScore, score)
-            state = .finished
-        }
-    }
+    private static let fallbackQuestions = [
+        TriviaQuestion(prompt: "Which framework builds declarative iOS interfaces?", correctAnswer: "SwiftUI", answers: ["SwiftUI", "SpriteKit", "CloudKit", "MapKit"]),
+        TriviaQuestion(prompt: "Which Apple framework displays maps?", correctAnswer: "MapKit", answers: ["MapKit", "Charts", "Photos", "StoreKit"]),
+        TriviaQuestion(prompt: "What type is commonly used for unique model IDs?", correctAnswer: "UUID", answers: ["UUID", "URL", "Int8", "CGFloat"]),
+        TriviaQuestion(prompt: "Which framework schedules local notifications?", correctAnswer: "UserNotifications", answers: ["UserNotifications", "CoreMotion", "AVKit", "RealityKit"]),
+        TriviaQuestion(prompt: "Which property wrapper stores simple settings?", correctAnswer: "AppStorage", answers: ["AppStorage", "GestureState", "Namespace", "SceneStorage"])
+    ]
 }
 
-private struct QuizLoadingView: View {
-    var body: some View {
-        SpacerLayout {
-            ZStack {
-                Circle()
-                    .stroke(.orange.opacity(0.22), lineWidth: 8)
-                    .frame(width: 126, height: 126)
-
-                Circle()
-                    .trim(from: 0.1, to: 0.82)
-                    .stroke(.orange, style: StrokeStyle(lineWidth: 8, lineCap: .round))
-                    .frame(width: 126, height: 126)
-                    .rotationEffect(.degrees(28))
-                    .shadow(color: .orange.opacity(0.8), radius: 18)
-
-                ProgressView()
-                    .tint(.white)
-                    .scaleEffect(1.4)
-            }
-
-            Text("Downloading trivia matrix...")
-                .font(.system(size: 18, weight: .black, design: .rounded))
-                .foregroundStyle(.white)
-
-            Text("Fetching 10 live multiple-choice questions.")
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundStyle(.white.opacity(0.62))
-        }
-    }
-}
-
-private struct QuizActiveView: View {
-    @ObservedObject var viewModel: QuizRushViewModel
-
-    var body: some View {
-        VStack(spacing: 16) {
-            HStack(spacing: 14) {
-                ScorePanel(title: "Marks", value: "\(viewModel.score)", tint: .orange)
-                ScorePanel(title: "Per Q", value: "+10 / -10", tint: .red)
-            }
-
-            HStack(spacing: 8) {
-                Text(viewModel.questionProgressText)
-                    .font(.system(size: 14, weight: .black, design: .monospaced))
-                    .foregroundStyle(.orange)
-
-                Spacer()
-
-                Image(systemName: "flame.fill")
-                    .foregroundStyle(.orange)
-
-                Text("\(viewModel.streak)")
-                    .font(.system(size: 14, weight: .black, design: .monospaced))
-                    .foregroundStyle(.white)
-            }
-            .frame(height: 26)
-
-            if let question = viewModel.currentQuestion {
-                Text(question.prompt)
-                    .font(.system(size: 22, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
-                    .minimumScaleFactor(0.72)
-                    .frame(maxWidth: .infinity, minHeight: 120)
-                    .padding(18)
-                    .background(.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(.orange.opacity(0.45), lineWidth: 1)
-                    )
-
-                VStack(spacing: 12) {
-                    ForEach(question.answers, id: \.self) { answer in
-                        QuizAnswerButton(
-                            answer: answer,
-                            selectedAnswer: viewModel.selectedAnswer,
-                            correctAnswer: question.correctAnswer,
-                            action: {
-                                withAnimation(.spring(response: 0.22, dampingFraction: 0.8)) {
-                                    viewModel.chooseAnswer(answer)
-                                }
-                            }
-                        )
-                    }
-                }
-            }
-
-            Spacer(minLength: 0)
-        }
-        .offset(x: viewModel.screenShake ? -8 : 0)
-        .animation(.default.repeatCount(3, autoreverses: true), value: viewModel.screenShake)
-    }
-}
-
-private struct QuizAnswerButton: View {
-    let answer: String
-    let selectedAnswer: String?
-    let correctAnswer: String
-    let action: () -> Void
-
-    private var tint: Color {
-        guard let selectedAnswer else { return .orange }
-
-        if answer == correctAnswer {
-            return .green
-        }
-
-        if answer == selectedAnswer {
-            return .red
-        }
-
-        return .orange.opacity(0.45)
-    }
-
-    var body: some View {
-        Button(action: action) {
-            Text(answer)
-                .font(.system(size: 16, weight: .black, design: .rounded))
-                .foregroundStyle(.white)
-                .multilineTextAlignment(.center)
-                .minimumScaleFactor(0.72)
-                .frame(maxWidth: .infinity, minHeight: 54)
-                .padding(.horizontal, 14)
-                .background(tint.opacity(selectedAnswer == nil ? 0.16 : 0.28), in: RoundedRectangle(cornerRadius: 8))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(tint.opacity(0.85), lineWidth: 1)
-                )
-                .shadow(color: tint.opacity(selectedAnswer == nil ? 0.18 : 0.38), radius: 12)
-        }
-        .buttonStyle(.plain)
-        .disabled(selectedAnswer != nil)
-    }
-}
-
-private struct QuizErrorView: View {
-    let message: String
-    let retry: () -> Void
-
-    var body: some View {
-        SpacerLayout {
-            Image(systemName: "wifi.slash")
-                .font(.system(size: 54, weight: .black))
-                .foregroundStyle(.orange)
-                .shadow(color: .orange.opacity(0.75), radius: 18)
-
-            Text("Offline Warning")
-                .font(.system(size: 30, weight: .black, design: .rounded))
-                .foregroundStyle(.white)
-
-            Text(message)
-                .font(.system(size: 15, weight: .semibold, design: .rounded))
-                .foregroundStyle(.white.opacity(0.68))
-                .multilineTextAlignment(.center)
-
-            Button(action: retry) {
-                Text("Retry")
-                    .font(.system(size: 18, weight: .black, design: .rounded))
-                    .foregroundStyle(.black)
-                    .frame(maxWidth: 260, minHeight: 56)
-                    .background(.orange, in: RoundedRectangle(cornerRadius: 8))
-            }
-            .buttonStyle(.plain)
-            .padding(.top, 8)
-        }
-    }
-}
-
-private struct SpacerLayout<Content: View>: View {
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(spacing: 18) {
-            Spacer()
-            content
-            Spacer()
-        }
-        .frame(maxWidth: .infinity)
-    }
-}
-
-private extension String {
+extension String {
     var decodedHTML: String {
         guard let data = data(using: .utf8) else { return self }
 
@@ -1176,41 +322,601 @@ private extension String {
     }
 }
 
-private struct GameTopBar: View {
-    let title: String
-    let icon: String
-    let tint: Color
-    let returnToMenu: () -> Void
+// MARK: - View Models
 
-    var body: some View {
-        HStack {
-            Button(action: returnToMenu) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
-                    .background(.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
-            }
-            .buttonStyle(.plain)
+@MainActor
+final class GameRouter: ObservableObject {
+    @Published var selectedMode: GameMode?
+    @Published var completedSession: GameSession?
+}
 
-            Spacer()
+@MainActor
+final class TapFrenzyViewModel: ObservableObject {
+    @Published var score = 0
+    @Published var remainingTime = 10
+    @Published var isFinished = false
 
-            Text(title)
-                .font(.system(size: 20, weight: .black, design: .rounded))
-                .foregroundStyle(.white)
+    var buttonSize: CGFloat {
+        90 + (CGFloat(remainingTime) / 10 * 150)
+    }
 
-            Spacer()
+    var isBonusActive: Bool {
+        remainingTime == 5 || remainingTime == 4
+    }
 
-            Image(systemName: icon)
-                .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(tint)
-                .frame(width: 44, height: 44)
-                .background(.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
+    func start() {
+        score = 0
+        remainingTime = 10
+        isFinished = false
+    }
+
+    func tap() {
+        guard !isFinished else { return }
+        score += isBonusActive ? 2 : 1
+    }
+
+    func tick() {
+        guard !isFinished else { return }
+
+        if remainingTime > 0 {
+            remainingTime -= 1
+        }
+
+        if remainingTime == 0 {
+            isFinished = true
         }
     }
 }
 
-private struct ScorePanel: View {
+@MainActor
+final class LightItUpViewModel: ObservableObject {
+    @Published var score = 0
+    @Published var lives = 3
+    @Published var remainingTime = 30
+    @Published var activeTiles: Set<Int> = []
+    @Published var level = 1
+    @Published var isFinished = false
+
+    private var tickCount = 0
+
+    var tileCount: Int { level < 3 ? 6 : 9 }
+    var activeTileCount: Int { min(level, 3) }
+    var tint: Color { level == 1 ? .yellow : level == 2 ? .orange : .red }
+
+    func start() {
+        score = 0
+        lives = 3
+        remainingTime = 30
+        activeTiles = []
+        level = 1
+        tickCount = 0
+        isFinished = false
+        spawnTiles()
+    }
+
+    func tapTile(_ tile: Int) {
+        guard !isFinished else { return }
+
+        if activeTiles.contains(tile) {
+            score += level * 10
+            activeTiles.remove(tile)
+            if activeTiles.isEmpty {
+                spawnTiles()
+            }
+        } else {
+            lives -= 1
+            if lives <= 0 {
+                isFinished = true
+            }
+        }
+    }
+
+    func tick() {
+        guard !isFinished else { return }
+
+        tickCount += 1
+        remainingTime -= 1
+
+        if remainingTime <= 20 { level = max(level, 2) }
+        if remainingTime <= 10 { level = max(level, 3) }
+
+        if tickCount.isMultiple(of: max(2, 5 - level)) {
+            spawnTiles()
+        }
+
+        if remainingTime <= 0 {
+            isFinished = true
+        }
+    }
+
+    private func spawnTiles() {
+        let range = 0..<tileCount
+        activeTiles = Set(range.shuffled().prefix(activeTileCount))
+    }
+}
+
+@MainActor
+final class QuizRushViewModel: ObservableObject {
+    @Published var questions: [TriviaQuestion] = []
+    @Published var currentIndex = 0
+    @Published var score = 0
+    @Published var selectedAnswer: String?
+    @Published var isLoading = true
+    @Published var isFinished = false
+
+    private let service = TriviaService()
+
+    var currentQuestion: TriviaQuestion? {
+        guard questions.indices.contains(currentIndex) else { return nil }
+        return questions[currentIndex]
+    }
+
+    var progressText: String {
+        "Question \(min(currentIndex + 1, questions.count)) of \(questions.count)"
+    }
+
+    func start() async {
+        isLoading = true
+        questions = await service.fetchQuestions()
+        currentIndex = 0
+        score = 0
+        selectedAnswer = nil
+        isFinished = false
+        isLoading = false
+    }
+
+    func choose(_ answer: String) {
+        guard selectedAnswer == nil, let question = currentQuestion else { return }
+
+        selectedAnswer = answer
+        score += answer == question.correctAnswer ? 10 : -10
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(550))
+            selectedAnswer = nil
+
+            if currentIndex + 1 < questions.count {
+                currentIndex += 1
+            } else {
+                isFinished = true
+            }
+        }
+    }
+}
+
+// MARK: - App Shell
+
+struct AppShellView: View {
+    var body: some View {
+        TabView {
+            NavigationStack {
+                HomeView()
+            }
+            .tabItem {
+                Label("Home", systemImage: "house.fill")
+            }
+
+            NavigationStack {
+                StatsView()
+            }
+            .tabItem {
+                Label("Stats", systemImage: "chart.bar.fill")
+            }
+
+            NavigationStack {
+                SessionMapView()
+            }
+            .tabItem {
+                Label("Map", systemImage: "map.fill")
+            }
+
+            NavigationStack {
+                SettingsView()
+            }
+            .tabItem {
+                Label("Settings", systemImage: "gearshape.fill")
+            }
+        }
+    }
+}
+
+struct HomeView: View {
+    @EnvironmentObject private var sessionStore: SessionStore
+    @StateObject private var router = GameRouter()
+
+    var body: some View {
+        ZStack {
+            PlayHubBackground()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    HeaderView()
+
+                    ForEach(GameMode.allCases) { mode in
+                        NavigationLink {
+                            GameHostView(mode: mode)
+                                .environmentObject(router)
+                        } label: {
+                            GameModeCard(mode: mode, bestScore: sessionStore.stats(for: mode).bestScore)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(20)
+            }
+        }
+        .navigationTitle("PlayHub")
+        .environmentObject(router)
+    }
+}
+
+struct HeaderView: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("COHNDSE251F iOS Games", systemImage: "gamecontroller.fill")
+                .font(.system(size: 14, weight: .black, design: .monospaced))
+                .foregroundStyle(.cyan)
+
+            Text("Choose a game mode")
+                .font(.system(size: 34, weight: .black, design: .rounded))
+                .foregroundStyle(.white)
+
+            Text("Sessions are saved for stats, maps, and sharing.")
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.7))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(18)
+        .background(.black.opacity(0.32), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(.cyan.opacity(0.35), lineWidth: 1)
+        )
+    }
+}
+
+struct GameModeCard: View {
+    let mode: GameMode
+    let bestScore: Int
+
+    var body: some View {
+        HStack(spacing: 16) {
+            Image(systemName: mode.symbolName)
+                .font(.system(size: 30, weight: .black))
+                .foregroundStyle(.black)
+                .frame(width: 60, height: 60)
+                .background(mode.tint, in: RoundedRectangle(cornerRadius: 8))
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(mode.displayTitle)
+                    .font(.system(size: 22, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+
+                Text(mode.subtitle)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.68))
+                    .lineLimit(2)
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 4) {
+                Text("BEST")
+                    .font(.system(size: 11, weight: .black, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.62))
+
+                Text("\(bestScore)")
+                    .font(.system(size: 24, weight: .black, design: .rounded))
+                    .foregroundStyle(mode.tint)
+            }
+        }
+        .padding(16)
+        .background(.black.opacity(0.34), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(mode.tint.opacity(0.48), lineWidth: 1)
+        )
+    }
+}
+
+struct GameHostView: View {
+    let mode: GameMode
+
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var sessionStore: SessionStore
+    @EnvironmentObject private var locationService: LocationService
+    @State private var completedSession: GameSession?
+
+    var body: some View {
+        ZStack {
+            PlayHubBackground()
+
+            if let completedSession {
+                ResultView(session: completedSession) {
+                    self.completedSession = nil
+                } exit: {
+                    dismiss()
+                }
+                .padding(20)
+            } else {
+                gameView
+                    .padding(20)
+            }
+        }
+        .navigationTitle(mode.displayTitle)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    @ViewBuilder
+    private var gameView: some View {
+        switch mode {
+        case .tapFrenzy:
+            TapFrenzyGameView { score in
+                finish(score: score)
+            }
+        case .lightItUp:
+            LightItUpGameView { score in
+                finish(score: score)
+            }
+        case .quizRush:
+            QuizRushGameView { score in
+                finish(score: score)
+            }
+        }
+    }
+
+    private func finish(score: Int) {
+        completedSession = sessionStore.record(
+            mode: mode,
+            score: score,
+            coordinate: locationService.currentCoordinate
+        )
+    }
+}
+
+// MARK: - Games
+
+struct TapFrenzyGameView: View {
+    let onComplete: (Int) -> Void
+
+    @StateObject private var viewModel = TapFrenzyViewModel()
+    private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        VStack(spacing: 22) {
+            GameTopBar(title: "Tap Frenzy", symbol: "hand.tap.fill", tint: .cyan)
+
+            HStack(spacing: 12) {
+                ScoreBadge(title: "Score", value: "\(viewModel.score)", tint: .cyan)
+                ScoreBadge(title: "Time", value: "\(viewModel.remainingTime)s", tint: .mint)
+            }
+
+            Text(viewModel.isBonusActive ? "DOUBLE POINTS" : "TAP AS FAST AS YOU CAN")
+                .font(.system(size: 15, weight: .black, design: .monospaced))
+                .foregroundStyle(viewModel.isBonusActive ? .yellow : .cyan)
+                .frame(height: 26)
+
+            Spacer()
+
+            Button(action: viewModel.tap) {
+                Text("TAP")
+                    .font(.system(size: 42, weight: .black, design: .rounded))
+                    .foregroundStyle(.black)
+                    .frame(width: viewModel.buttonSize, height: viewModel.buttonSize)
+                    .background(viewModel.isBonusActive ? .yellow : .cyan, in: Circle())
+                    .shadow(color: (viewModel.isBonusActive ? Color.yellow : Color.cyan).opacity(0.65), radius: 24)
+            }
+            .buttonStyle(.plain)
+            .animation(.spring(response: 0.25, dampingFraction: 0.75), value: viewModel.buttonSize)
+
+            Spacer()
+        }
+        .onAppear(perform: viewModel.start)
+        .onReceive(timer) { _ in
+            viewModel.tick()
+            if viewModel.isFinished {
+                onComplete(viewModel.score)
+            }
+        }
+    }
+}
+
+struct LightItUpGameView: View {
+    let onComplete: (Int) -> Void
+
+    @StateObject private var viewModel = LightItUpViewModel()
+    private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    private var columns: [GridItem] {
+        Array(repeating: GridItem(.flexible(), spacing: 12), count: 3)
+    }
+
+    var body: some View {
+        VStack(spacing: 18) {
+            GameTopBar(title: "Light It Up", symbol: "lightbulb.max.fill", tint: viewModel.tint)
+
+            HStack(spacing: 12) {
+                ScoreBadge(title: "Score", value: "\(viewModel.score)", tint: viewModel.tint)
+                ScoreBadge(title: "Time", value: "\(viewModel.remainingTime)s", tint: .mint)
+            }
+
+            HStack {
+                ForEach(0..<3, id: \.self) { index in
+                    Image(systemName: index < viewModel.lives ? "heart.fill" : "heart.slash.fill")
+                        .foregroundStyle(index < viewModel.lives ? .red : .gray)
+                }
+
+                Spacer()
+
+                Text("LEVEL \(viewModel.level)")
+                    .font(.system(size: 14, weight: .black, design: .monospaced))
+                    .foregroundStyle(viewModel.tint)
+            }
+
+            LazyVGrid(columns: columns, spacing: 12) {
+                ForEach(0..<viewModel.tileCount, id: \.self) { tile in
+                    Button {
+                        viewModel.tapTile(tile)
+                        if viewModel.isFinished {
+                            onComplete(viewModel.score)
+                        }
+                    } label: {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(viewModel.activeTiles.contains(tile) ? viewModel.tint : .white.opacity(0.10))
+                            .aspectRatio(1, contentMode: .fit)
+                            .overlay {
+                                Image(systemName: viewModel.activeTiles.contains(tile) ? "sparkle" : "square.grid.3x3")
+                                    .font(.system(size: 24, weight: .black))
+                                    .foregroundStyle(viewModel.activeTiles.contains(tile) ? .black : .white.opacity(0.2))
+                            }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            Text("Tap lit tiles only. Wrong taps cost lives.")
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.64))
+
+            Spacer()
+        }
+        .onAppear(perform: viewModel.start)
+        .onReceive(timer) { _ in
+            viewModel.tick()
+            if viewModel.isFinished {
+                onComplete(viewModel.score)
+            }
+        }
+    }
+}
+
+struct QuizRushGameView: View {
+    let onComplete: (Int) -> Void
+
+    @StateObject private var viewModel = QuizRushViewModel()
+
+    var body: some View {
+        VStack(spacing: 18) {
+            GameTopBar(title: "Quiz Rush", symbol: "questionmark.circle.fill", tint: .orange)
+
+            if viewModel.isLoading {
+                Spacer()
+                ProgressView("Loading trivia")
+                    .tint(.orange)
+                    .foregroundStyle(.white)
+                Spacer()
+            } else if let question = viewModel.currentQuestion {
+                HStack(spacing: 12) {
+                    ScoreBadge(title: "Marks", value: "\(viewModel.score)", tint: .orange)
+                    ScoreBadge(title: "Round", value: viewModel.progressText, tint: .red)
+                }
+
+                Text(question.prompt)
+                    .font(.system(size: 22, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                    .minimumScaleFactor(0.72)
+                    .frame(maxWidth: .infinity, minHeight: 120)
+                    .padding(16)
+                    .background(.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
+
+                VStack(spacing: 12) {
+                    ForEach(question.answers, id: \.self) { answer in
+                        Button {
+                            viewModel.choose(answer)
+                        } label: {
+                            Text(answer)
+                                .font(.system(size: 16, weight: .black, design: .rounded))
+                                .foregroundStyle(.white)
+                                .multilineTextAlignment(.center)
+                                .frame(maxWidth: .infinity, minHeight: 54)
+                                .padding(.horizontal, 12)
+                                .background(answerColor(answer, question: question), in: RoundedRectangle(cornerRadius: 8))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(viewModel.selectedAnswer != nil)
+                    }
+                }
+
+                Spacer()
+            }
+        }
+        .task {
+            await viewModel.start()
+        }
+        .onChange(of: viewModel.isFinished) { _, isFinished in
+            if isFinished {
+                onComplete(viewModel.score)
+            }
+        }
+    }
+
+    private func answerColor(_ answer: String, question: TriviaQuestion) -> Color {
+        guard let selected = viewModel.selectedAnswer else { return .orange.opacity(0.22) }
+        if answer == question.correctAnswer { return .green.opacity(0.55) }
+        if answer == selected { return .red.opacity(0.55) }
+        return .white.opacity(0.10)
+    }
+}
+
+// MARK: - Stats
+
+struct StatsView: View {
+    @EnvironmentObject private var sessionStore: SessionStore
+
+    var body: some View {
+        ZStack {
+            PlayHubBackground()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    HStack(spacing: 12) {
+                        StatCard(title: "Sessions", value: "\(sessionStore.sessions.count)", tint: .cyan)
+                        StatCard(title: "Total", value: "\(sessionStore.totalScore)", tint: .orange)
+                        StatCard(title: "Best", value: "\(sessionStore.bestSession?.score ?? 0)", tint: .yellow)
+                    }
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Scores by Mode")
+                            .font(.system(size: 22, weight: .black, design: .rounded))
+                            .foregroundStyle(.white)
+
+                        Chart(sessionStore.allStats) { stat in
+                            BarMark(
+                                x: .value("Mode", stat.mode.displayTitle),
+                                y: .value("Total Score", stat.totalScore)
+                            )
+                            .foregroundStyle(by: .value("Mode", stat.mode.displayTitle))
+                        }
+                        .frame(height: 240)
+                        .chartXAxisLabel("Game Mode")
+                        .chartYAxisLabel("Total Score")
+                    }
+                    .panelStyle()
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Recent Games")
+                            .font(.system(size: 22, weight: .black, design: .rounded))
+                            .foregroundStyle(.white)
+
+                        if sessionStore.sessions.isEmpty {
+                            EmptyStateView(text: "Play a game to create your first session.")
+                        } else {
+                            ForEach(sessionStore.sessions.prefix(8)) { session in
+                                SessionRow(session: session)
+                            }
+                        }
+                    }
+                    .panelStyle()
+                }
+                .padding(20)
+            }
+        }
+        .navigationTitle("Stats")
+    }
+}
+
+struct StatCard: View {
     let title: String
     let value: String
     let tint: Color
@@ -1218,135 +924,359 @@ private struct ScorePanel: View {
     var body: some View {
         VStack(spacing: 6) {
             Text(title.uppercased())
-                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                .font(.system(size: 11, weight: .black, design: .monospaced))
                 .foregroundStyle(tint)
 
             Text(value)
-                .font(.system(size: 34, weight: .black, design: .rounded))
+                .font(.system(size: 26, weight: .black, design: .rounded))
                 .foregroundStyle(.white)
+                .minimumScaleFactor(0.7)
         }
-        .frame(maxWidth: .infinity, minHeight: 92)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(.white.opacity(0.10))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(tint.opacity(0.5), lineWidth: 1)
-                )
-        )
+        .frame(maxWidth: .infinity, minHeight: 86)
+        .background(.black.opacity(0.34), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(tint.opacity(0.4), lineWidth: 1))
     }
 }
 
-private struct GameOverView: View {
-    let title: String
-    let score: Int
-    let highScore: Int
-    let playAgain: () -> Void
-    let returnToMenu: () -> Void
+struct SessionRow: View {
+    let session: GameSession
 
     var body: some View {
-        VStack(spacing: 20) {
-            Spacer()
+        HStack(spacing: 12) {
+            Image(systemName: session.mode.symbolName)
+                .foregroundStyle(.black)
+                .frame(width: 40, height: 40)
+                .background(session.mode.tint, in: RoundedRectangle(cornerRadius: 8))
 
-            VStack(spacing: 12) {
-                Image(systemName: "trophy.fill")
-                    .font(.system(size: 52, weight: .bold))
-                    .foregroundStyle(.yellow)
-                    .shadow(color: .yellow.opacity(0.7), radius: 16)
-
-                Text(title)
-                    .font(.system(size: 36, weight: .black, design: .rounded))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(session.mode.displayTitle)
+                    .font(.system(size: 16, weight: .black, design: .rounded))
                     .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
 
-                Text("Final Score: \(score)")
-                    .font(.system(size: 24, weight: .bold, design: .rounded))
-                    .foregroundStyle(.cyan)
-
-                Text("High Score: \(highScore)")
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.8))
+                Text(session.timestamp.formatted(date: .abbreviated, time: .shortened))
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.6))
             }
 
-            VStack(spacing: 14) {
-                Button(action: playAgain) {
-                    Text("Play Again")
-                        .font(.system(size: 19, weight: .black, design: .rounded))
-                        .foregroundStyle(.black)
-                        .frame(maxWidth: 300, minHeight: 58)
-                        .background(.cyan, in: RoundedRectangle(cornerRadius: 8))
-                }
-                .buttonStyle(.plain)
+            Spacer()
 
-                Button(action: returnToMenu) {
-                    Text("Main Menu")
-                        .font(.system(size: 17, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: 300, minHeight: 54)
-                        .background(.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
+            Text("\(session.score)")
+                .font(.system(size: 22, weight: .black, design: .rounded))
+                .foregroundStyle(session.mode.tint)
+        }
+        .padding(12)
+        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+// MARK: - Map
+
+struct SessionMapView: View {
+    @EnvironmentObject private var sessionStore: SessionStore
+    @State private var selectedSession: GameSession?
+    @State private var position: MapCameraPosition = .region(
+        MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 6.9271, longitude: 79.8612),
+            span: MKCoordinateSpan(latitudeDelta: 0.12, longitudeDelta: 0.12)
+        )
+    )
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            Map(position: $position) {
+                ForEach(sessionStore.sessions) { session in
+                    Annotation(session.mode.displayTitle, coordinate: session.coordinate) {
+                        Button {
+                            selectedSession = session
+                        } label: {
+                            VStack(spacing: 2) {
+                                Image(systemName: session.mode.symbolName)
+                                    .font(.system(size: 15, weight: .black))
+                                Text("\(session.score)")
+                                    .font(.system(size: 11, weight: .black, design: .rounded))
+                            }
+                            .foregroundStyle(.black)
+                            .padding(8)
+                            .background(session.mode.tint, in: RoundedRectangle(cornerRadius: 8))
+                            .shadow(radius: 6)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
-                .buttonStyle(.plain)
+            }
+            .mapStyle(.standard(elevation: .realistic))
+            .ignoresSafeArea(edges: .bottom)
+
+            if sessionStore.sessions.isEmpty {
+                EmptyStateView(text: "Completed sessions will appear as map pins.")
+                    .padding(20)
+            }
+
+            if let selectedSession {
+                SessionMapCallout(session: selectedSession)
+                    .padding(20)
+            }
+        }
+        .navigationTitle("Map")
+    }
+}
+
+struct SessionMapCallout: View {
+    let session: GameSession
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: session.mode.symbolName)
+                .foregroundStyle(.black)
+                .frame(width: 44, height: 44)
+                .background(session.mode.tint, in: RoundedRectangle(cornerRadius: 8))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(session.mode.displayTitle)
+                    .font(.system(size: 17, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+
+                Text("Score \(session.score) at \(session.timestamp.formatted(date: .abbreviated, time: .shortened))")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.68))
             }
 
             Spacer()
         }
+        .padding(14)
+        .background(.black.opacity(0.78), in: RoundedRectangle(cornerRadius: 8))
     }
 }
 
-private struct SpaceBackground: View {
+// MARK: - Settings
+
+struct SettingsView: View {
+    @EnvironmentObject private var sessionStore: SessionStore
+    @EnvironmentObject private var locationService: LocationService
+    @EnvironmentObject private var notificationService: NotificationService
+
+    @AppStorage("notificationsEnabled") private var notificationsEnabled = false
+    @AppStorage("reminderTimeInterval") private var reminderTimeInterval = 20.0 * 60.0 * 60.0
+    @State private var isShowingResetConfirmation = false
+
+    private var reminderDate: Binding<Date> {
+        Binding {
+            Calendar.current.startOfDay(for: Date()).addingTimeInterval(reminderTimeInterval)
+        } set: { newValue in
+            let components = Calendar.current.dateComponents([.hour, .minute], from: newValue)
+            reminderTimeInterval = Double((components.hour ?? 20) * 3600 + (components.minute ?? 0) * 60)
+        }
+    }
+
+    var body: some View {
+        ZStack {
+            PlayHubBackground()
+
+            Form {
+                Section("Daily Reminder") {
+                    Toggle("Enable Notifications", isOn: $notificationsEnabled)
+
+                    DatePicker("Reminder Time", selection: reminderDate, displayedComponents: .hourAndMinute)
+
+                    Text(notificationService.statusMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section("Location") {
+                    Button("Enable Location for New Scores") {
+                        locationService.requestPermissionIfConfigured()
+                    }
+
+                    Text(locationService.authorizationMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section("Stats") {
+                    Button("Reset All Stats", role: .destructive) {
+                        isShowingResetConfirmation = true
+                    }
+                }
+            }
+            .scrollContentBackground(.hidden)
+        }
+        .navigationTitle("Settings")
+        .onChange(of: notificationsEnabled) { _, isEnabled in
+            Task {
+                if isEnabled {
+                    await notificationService.scheduleDailyReminder(at: reminderDate.wrappedValue)
+                } else {
+                    notificationService.cancelDailyReminder()
+                }
+            }
+        }
+        .onChange(of: reminderTimeInterval) { _, _ in
+            Task {
+                if notificationsEnabled {
+                    await notificationService.scheduleDailyReminder(at: reminderDate.wrappedValue)
+                }
+            }
+        }
+        .confirmationDialog("Reset all saved game sessions?", isPresented: $isShowingResetConfirmation, titleVisibility: .visible) {
+            Button("Reset All Stats", role: .destructive) {
+                sessionStore.reset()
+            }
+            Button("Cancel", role: .cancel) { }
+        }
+    }
+}
+
+// MARK: - Shared Views
+
+struct ResultView: View {
+    let session: GameSession
+    let playAgain: () -> Void
+    let exit: () -> Void
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Spacer()
+
+            Image(systemName: "trophy.fill")
+                .font(.system(size: 58, weight: .black))
+                .foregroundStyle(.yellow)
+                .shadow(color: .yellow.opacity(0.6), radius: 18)
+
+            Text("Result Saved")
+                .font(.system(size: 34, weight: .black, design: .rounded))
+                .foregroundStyle(.white)
+
+            Text("\(session.mode.displayTitle) score: \(session.score)")
+                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .foregroundStyle(session.mode.tint)
+
+            ShareLink(item: session.shareText) {
+                Label("Share Score", systemImage: "square.and.arrow.up")
+                    .font(.system(size: 17, weight: .black, design: .rounded))
+                    .foregroundStyle(.black)
+                    .frame(maxWidth: 280, minHeight: 54)
+                    .background(.cyan, in: RoundedRectangle(cornerRadius: 8))
+            }
+
+            Button(action: playAgain) {
+                Text("Play Again")
+                    .font(.system(size: 17, weight: .black, design: .rounded))
+                    .foregroundStyle(.black)
+                    .frame(maxWidth: 280, minHeight: 54)
+                    .background(session.mode.tint, in: RoundedRectangle(cornerRadius: 8))
+            }
+            .buttonStyle(.plain)
+
+            Button(action: exit) {
+                Text("Back to Home")
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: 280, minHeight: 50)
+                    .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+            }
+            .buttonStyle(.plain)
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+        .panelStyle()
+    }
+}
+
+struct GameTopBar: View {
+    let title: String
+    let symbol: String
+    let tint: Color
+
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(.system(size: 24, weight: .black, design: .rounded))
+                .foregroundStyle(.white)
+
+            Spacer()
+
+            Image(systemName: symbol)
+                .font(.system(size: 20, weight: .black))
+                .foregroundStyle(.black)
+                .frame(width: 44, height: 44)
+                .background(tint, in: RoundedRectangle(cornerRadius: 8))
+        }
+    }
+}
+
+struct ScoreBadge: View {
+    let title: String
+    let value: String
+    let tint: Color
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Text(title.uppercased())
+                .font(.system(size: 11, weight: .black, design: .monospaced))
+                .foregroundStyle(tint)
+
+            Text(value)
+                .font(.system(size: 22, weight: .black, design: .rounded))
+                .foregroundStyle(.white)
+                .minimumScaleFactor(0.6)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, minHeight: 82)
+        .background(.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(tint.opacity(0.45), lineWidth: 1))
+    }
+}
+
+struct EmptyStateView: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 15, weight: .semibold, design: .rounded))
+            .foregroundStyle(.white.opacity(0.74))
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity, minHeight: 88)
+            .background(.black.opacity(0.44), in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+struct PlayHubBackground: View {
     var body: some View {
         ZStack {
             LinearGradient(
                 colors: [
-                    Color(red: 0.02, green: 0.03, blue: 0.09),
-                    Color(red: 0.04, green: 0.10, blue: 0.18),
-                    Color(red: 0.10, green: 0.03, blue: 0.18)
+                    Color(red: 0.02, green: 0.03, blue: 0.08),
+                    Color(red: 0.05, green: 0.08, blue: 0.12),
+                    Color(red: 0.10, green: 0.03, blue: 0.10)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
 
-            StarField()
-                .opacity(0.95)
-
-            VStack(spacing: 18) {
-                Spacer()
-
-                ForEach(0..<5, id: \.self) { index in
-                    Rectangle()
-                        .fill(.cyan.opacity(0.08 + Double(index) * 0.025))
-                        .frame(height: 1)
-                        .padding(.horizontal, CGFloat(26 + index * 22))
+            GeometryReader { geometry in
+                ForEach(0..<18, id: \.self) { index in
+                    Circle()
+                        .fill(index.isMultiple(of: 3) ? .cyan.opacity(0.85) : .white.opacity(0.7))
+                        .frame(width: index.isMultiple(of: 4) ? 4 : 2, height: index.isMultiple(of: 4) ? 4 : 2)
+                        .position(
+                            x: CGFloat((index * 47) % 100) / 100 * geometry.size.width,
+                            y: CGFloat((index * 29) % 100) / 100 * geometry.size.height
+                        )
                 }
             }
-            .padding(.bottom, 38)
         }
         .ignoresSafeArea()
     }
 }
 
-private struct StarField: View {
-    private let stars: [CGPoint] = [
-        CGPoint(x: 0.08, y: 0.10), CGPoint(x: 0.22, y: 0.18), CGPoint(x: 0.40, y: 0.08),
-        CGPoint(x: 0.70, y: 0.14), CGPoint(x: 0.88, y: 0.09), CGPoint(x: 0.15, y: 0.34),
-        CGPoint(x: 0.32, y: 0.43), CGPoint(x: 0.57, y: 0.33), CGPoint(x: 0.82, y: 0.42),
-        CGPoint(x: 0.10, y: 0.66), CGPoint(x: 0.28, y: 0.78), CGPoint(x: 0.48, y: 0.62),
-        CGPoint(x: 0.68, y: 0.76), CGPoint(x: 0.90, y: 0.70), CGPoint(x: 0.76, y: 0.90)
-    ]
-
-    var body: some View {
-        GeometryReader { geometry in
-            ForEach(stars.indices, id: \.self) { index in
-                Circle()
-                    .fill(index.isMultiple(of: 3) ? .cyan : .white)
-                    .frame(width: index.isMultiple(of: 4) ? 4 : 2, height: index.isMultiple(of: 4) ? 4 : 2)
-                    .position(
-                        x: stars[index].x * geometry.size.width,
-                        y: stars[index].y * geometry.size.height
-                    )
-                    .shadow(color: .white.opacity(0.8), radius: 4)
-            }
-        }
+extension View {
+    func panelStyle() -> some View {
+        self
+            .padding(16)
+            .background(.black.opacity(0.34), in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(.white.opacity(0.12), lineWidth: 1))
     }
 }
 
