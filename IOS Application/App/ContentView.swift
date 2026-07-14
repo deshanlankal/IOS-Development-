@@ -63,7 +63,7 @@ enum GameMode: String, CaseIterable, Codable, Identifiable {
         switch self {
         case .tapFrenzy: .cyan
         case .lightItUp: .yellow
-        case .quizRush: .orange
+        case .quizRush: .mint
         }
     }
 }
@@ -117,6 +117,65 @@ struct TriviaQuestion: Identifiable, Codable {
         self.correctAnswer = correctAnswer
         self.answers = answers
     }
+}
+
+enum TriviaDifficulty: String, CaseIterable, Identifiable {
+    case any
+    case easy
+    case medium
+    case hard
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .any: "Any Difficulty"
+        case .easy: "Easy"
+        case .medium: "Medium"
+        case .hard: "Hard"
+        }
+    }
+
+    var apiValue: String? {
+        self == .any ? nil : rawValue
+    }
+}
+
+struct TriviaCategory: Identifiable, Hashable {
+    let id: Int?
+    let title: String
+
+    var apiValue: String? {
+        id.map(String.init)
+    }
+
+    static let all: [TriviaCategory] = [
+        TriviaCategory(id: nil, title: "Any Category"),
+        TriviaCategory(id: 9, title: "General Knowledge"),
+        TriviaCategory(id: 10, title: "Entertainment: Books"),
+        TriviaCategory(id: 11, title: "Entertainment: Film"),
+        TriviaCategory(id: 12, title: "Entertainment: Music"),
+        TriviaCategory(id: 13, title: "Entertainment: Musicals & Theatres"),
+        TriviaCategory(id: 14, title: "Entertainment: Television"),
+        TriviaCategory(id: 15, title: "Entertainment: Video Games"),
+        TriviaCategory(id: 16, title: "Entertainment: Board Games"),
+        TriviaCategory(id: 17, title: "Science & Nature"),
+        TriviaCategory(id: 18, title: "Science: Computers"),
+        TriviaCategory(id: 19, title: "Science: Mathematics"),
+        TriviaCategory(id: 20, title: "Mythology"),
+        TriviaCategory(id: 21, title: "Sports"),
+        TriviaCategory(id: 22, title: "Geography"),
+        TriviaCategory(id: 23, title: "History"),
+        TriviaCategory(id: 24, title: "Politics"),
+        TriviaCategory(id: 25, title: "Art"),
+        TriviaCategory(id: 26, title: "Celebrities"),
+        TriviaCategory(id: 27, title: "Animals"),
+        TriviaCategory(id: 28, title: "Vehicles"),
+        TriviaCategory(id: 29, title: "Entertainment: Comics"),
+        TriviaCategory(id: 30, title: "Science: Gadgets"),
+        TriviaCategory(id: 31, title: "Entertainment: Japanese Anime & Manga"),
+        TriviaCategory(id: 32, title: "Entertainment: Cartoon & Animations")
+    ]
 }
 
 private struct TriviaAPIResponse: Decodable {
@@ -273,8 +332,24 @@ final class NotificationService: ObservableObject {
 }
 
 struct TriviaService {
-    func fetchQuestions() async -> [TriviaQuestion] {
-        guard let url = URL(string: "https://opentdb.com/api.php?amount=5&type=multiple") else {
+    func fetchQuestions(category: TriviaCategory, difficulty: TriviaDifficulty) async -> [TriviaQuestion] {
+        var components = URLComponents(string: "https://opentdb.com/api.php")
+        var queryItems = [
+            URLQueryItem(name: "amount", value: "5"),
+            URLQueryItem(name: "type", value: "multiple")
+        ]
+
+        if let categoryValue = category.apiValue {
+            queryItems.append(URLQueryItem(name: "category", value: categoryValue))
+        }
+
+        if let difficultyValue = difficulty.apiValue {
+            queryItems.append(URLQueryItem(name: "difficulty", value: difficultyValue))
+        }
+
+        components?.queryItems = queryItems
+
+        guard let url = components?.url else {
             return Self.fallbackQuestions
         }
 
@@ -441,8 +516,11 @@ final class QuizRushViewModel: ObservableObject {
     @Published var currentIndex = 0
     @Published var score = 0
     @Published var selectedAnswer: String?
-    @Published var isLoading = true
+    @Published var isLoading = false
     @Published var isFinished = false
+    @Published var hasStarted = false
+    @Published var selectedCategory = TriviaCategory.all[0]
+    @Published var selectedDifficulty = TriviaDifficulty.any
 
     private let service = TriviaService()
 
@@ -456,8 +534,9 @@ final class QuizRushViewModel: ObservableObject {
     }
 
     func start() async {
+        hasStarted = true
         isLoading = true
-        questions = await service.fetchQuestions()
+        questions = await service.fetchQuestions(category: selectedCategory, difficulty: selectedDifficulty)
         currentIndex = 0
         score = 0
         selectedAnswer = nil
@@ -797,17 +876,19 @@ struct QuizRushGameView: View {
 
     var body: some View {
         VStack(spacing: 18) {
-            GameTopBar(title: "Quiz Rush", symbol: "questionmark.circle.fill", tint: .orange)
+            GameTopBar(title: "Quiz Rush", symbol: "questionmark.circle.fill", tint: .mint)
 
-            if viewModel.isLoading {
+            if !viewModel.hasStarted {
+                quizSetup
+            } else if viewModel.isLoading {
                 Spacer()
                 ProgressView("Loading trivia")
-                    .tint(.orange)
+                    .tint(.mint)
                     .foregroundStyle(.white)
                 Spacer()
             } else if let question = viewModel.currentQuestion {
                 HStack(spacing: 12) {
-                    ScoreBadge(title: "Marks", value: "\(viewModel.score)", tint: .orange)
+                    ScoreBadge(title: "Marks", value: "\(viewModel.score)", tint: .mint)
                     ScoreBadge(title: "Round", value: viewModel.progressText, tint: .red)
                 }
 
@@ -841,9 +922,6 @@ struct QuizRushGameView: View {
                 Spacer()
             }
         }
-        .task {
-            await viewModel.start()
-        }
         .onChange(of: viewModel.isFinished) { _, isFinished in
             if isFinished {
                 onComplete(viewModel.score)
@@ -851,8 +929,60 @@ struct QuizRushGameView: View {
         }
     }
 
+    private var quizSetup: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("Choose Quiz Options")
+                .font(.system(size: 26, weight: .black, design: .rounded))
+                .foregroundStyle(.white)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Category")
+                    .font(.system(size: 12, weight: .black, design: .monospaced))
+                    .foregroundStyle(.mint)
+
+                Picker("Category", selection: $viewModel.selectedCategory) {
+                    ForEach(TriviaCategory.all) { category in
+                        Text(category.title).tag(category)
+                    }
+                }
+                .pickerStyle(.menu)
+                .tint(.mint)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Difficulty")
+                    .font(.system(size: 12, weight: .black, design: .monospaced))
+                    .foregroundStyle(.mint)
+
+                Picker("Difficulty", selection: $viewModel.selectedDifficulty) {
+                    ForEach(TriviaDifficulty.allCases) { difficulty in
+                        Text(difficulty.title).tag(difficulty)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+
+            Button {
+                Task {
+                    await viewModel.start()
+                }
+            } label: {
+                Label("Start Quiz", systemImage: "play.fill")
+                    .font(.system(size: 18, weight: .black, design: .rounded))
+                    .foregroundStyle(.black)
+                    .frame(maxWidth: .infinity, minHeight: 56)
+                    .background(.mint, in: RoundedRectangle(cornerRadius: 8))
+            }
+            .buttonStyle(.plain)
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .panelStyle()
+    }
+
     private func answerColor(_ answer: String, question: TriviaQuestion) -> Color {
-        guard let selected = viewModel.selectedAnswer else { return .orange.opacity(0.22) }
+        guard let selected = viewModel.selectedAnswer else { return .mint.opacity(0.22) }
         if answer == question.correctAnswer { return .green.opacity(0.55) }
         if answer == selected { return .red.opacity(0.55) }
         return .white.opacity(0.10)
