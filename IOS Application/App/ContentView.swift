@@ -129,10 +129,28 @@ enum TriviaDifficulty: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .any: "Any Difficulty"
+        case .any: "Mixed"
         case .easy: "Easy"
         case .medium: "Medium"
         case .hard: "Hard"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .any: "A surprise mix of question levels."
+        case .easy: "Best for a relaxed warm-up round."
+        case .medium: "Balanced questions with a fair challenge."
+        case .hard: "Tough questions for higher scores."
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .any: "shuffle"
+        case .easy: "leaf.fill"
+        case .medium: "target"
+        case .hard: "flame.fill"
         }
     }
 
@@ -208,7 +226,9 @@ final class SessionStore: ObservableObject {
 
     func record(mode: GameMode, score: Int, coordinate: CLLocationCoordinate2D) -> GameSession {
         let session = GameSession(mode: mode, score: score, latitude: coordinate.latitude, longitude: coordinate.longitude)
-        sessions.insert(session, at: 0)
+        // Keep every completed play. Do not replace an existing session when a
+        // later game is played at the same coordinate.
+        sessions.append(session)
         save()
         return session
     }
@@ -247,29 +267,42 @@ final class SessionStore: ObservableObject {
 
 @MainActor
 final class LocationService: NSObject, ObservableObject, CLLocationManagerDelegate {
-    @Published var authorizationMessage = "Location is optional. Scores use your current coordinate when available."
+    @Published var authorizationMessage = "Enable Location so new scores are saved where you play."
+    @Published private(set) var latestCoordinate: CLLocationCoordinate2D?
 
     private let manager = CLLocationManager()
-    private let fallbackCoordinate = CLLocationCoordinate2D(latitude: 6.9271, longitude: 79.8612)
-
     override init() {
         super.init()
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+        requestPermissionIfConfigured()
     }
 
-    var currentCoordinate: CLLocationCoordinate2D {
-        manager.location?.coordinate ?? fallbackCoordinate
+    var currentCoordinate: CLLocationCoordinate2D? {
+        latestCoordinate ?? manager.location?.coordinate
     }
 
     func requestPermissionIfConfigured() {
         guard Bundle.main.object(forInfoDictionaryKey: "NSLocationWhenInUseUsageDescription") != nil else {
-            authorizationMessage = "Add NSLocationWhenInUseUsageDescription to use live location. Using fallback coordinates for now."
+            authorizationMessage = "Location permission is not configured. New results will not be saved until it is enabled."
             return
         }
 
-        manager.requestWhenInUseAuthorization()
-        manager.requestLocation()
+        switch manager.authorizationStatus {
+        case .authorizedAlways, .authorizedWhenInUse:
+            manager.requestLocation()
+        case .notDetermined:
+            manager.requestWhenInUseAuthorization()
+        default:
+            authorizationMessage = "Location access is disabled. Enable it in Settings to save the real play location."
+        }
+    }
+
+    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let coordinate = locations.last?.coordinate else { return }
+        Task { @MainActor in
+            latestCoordinate = coordinate
+        }
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) { }
@@ -281,7 +314,7 @@ final class LocationService: NSObject, ObservableObject, CLLocationManagerDelega
                 authorizationMessage = "Location enabled. New results can use your current coordinate."
                 manager.requestLocation()
             case .denied, .restricted:
-                authorizationMessage = "Location is disabled. New results use fallback coordinates."
+                authorizationMessage = "Location is disabled. Enable it in Settings to save the real play location."
             case .notDetermined:
                 authorizationMessage = "Location permission has not been requested."
             @unknown default:
@@ -705,6 +738,7 @@ struct GameHostView: View {
     @EnvironmentObject private var sessionStore: SessionStore
     @EnvironmentObject private var locationService: LocationService
     @State private var completedSession: GameSession?
+    @State private var hasRecordedResult = false
 
     var body: some View {
         ZStack {
@@ -724,6 +758,9 @@ struct GameHostView: View {
         }
         .navigationTitle(mode.displayTitle)
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            locationService.requestPermissionIfConfigured()
+        }
     }
 
     @ViewBuilder
@@ -745,11 +782,13 @@ struct GameHostView: View {
     }
 
     private func finish(score: Int) {
-        completedSession = sessionStore.record(
-            mode: mode,
-            score: score,
-            coordinate: locationService.currentCoordinate
-        )
+        // A game can emit its completion callback from more than one state
+        // transition. Only create one saved session for each game screen.
+        guard !hasRecordedResult else { return }
+        hasRecordedResult = true
+
+        let coordinate = locationService.currentCoordinate ?? CLLocationCoordinate2D(latitude: 6.9271, longitude: 79.8612)
+        completedSession = sessionStore.record(mode: mode, score: score, coordinate: coordinate)
     }
 }
 
@@ -949,17 +988,50 @@ struct QuizRushGameView: View {
                 .tint(.mint)
             }
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
                 Text("Difficulty")
                     .font(.system(size: 12, weight: .black, design: .monospaced))
                     .foregroundStyle(.mint)
 
-                Picker("Difficulty", selection: $viewModel.selectedDifficulty) {
-                    ForEach(TriviaDifficulty.allCases) { difficulty in
-                        Text(difficulty.title).tag(difficulty)
+                ForEach(TriviaDifficulty.allCases) { difficulty in
+                    Button {
+                        viewModel.selectedDifficulty = difficulty
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: difficulty.symbolName)
+                                .font(.system(size: 15, weight: .black))
+                                .foregroundStyle(viewModel.selectedDifficulty == difficulty ? .black : .mint)
+                                .frame(width: 34, height: 34)
+                                .background(viewModel.selectedDifficulty == difficulty ? .mint : .white.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
+
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(difficulty.title)
+                                    .font(.system(size: 16, weight: .black, design: .rounded))
+                                    .foregroundStyle(.white)
+
+                                Text(difficulty.subtitle)
+                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(.white.opacity(0.65))
+                                    .multilineTextAlignment(.leading)
+                            }
+
+                            Spacer()
+
+                            if viewModel.selectedDifficulty == difficulty {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 20, weight: .bold))
+                                    .foregroundStyle(.mint)
+                            }
+                        }
+                        .padding(12)
+                        .background(.white.opacity(viewModel.selectedDifficulty == difficulty ? 0.16 : 0.08), in: RoundedRectangle(cornerRadius: 8))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(viewModel.selectedDifficulty == difficulty ? .mint.opacity(0.85) : .white.opacity(0.12), lineWidth: 1)
+                        )
                     }
+                    .buttonStyle(.plain)
                 }
-                .pickerStyle(.segmented)
             }
 
             Button {
@@ -1114,8 +1186,8 @@ struct SessionMapView: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             Map(position: $position) {
-                ForEach(sessionStore.sessions) { session in
-                    Annotation(session.mode.displayTitle, coordinate: session.coordinate) {
+                ForEach(Array(sessionStore.sessions.enumerated()), id: \.element.id) { index, session in
+                    Annotation(session.mode.displayTitle, coordinate: mapCoordinate(for: session, index: index)) {
                         Button {
                             selectedSession = session
                         } label: {
@@ -1148,6 +1220,52 @@ struct SessionMapView: View {
             }
         }
         .navigationTitle("Map")
+        .onAppear(perform: fitMapToSessions)
+        .onChange(of: sessionStore.sessions) { _, _ in
+            fitMapToSessions()
+        }
+    }
+
+    private func fitMapToSessions() {
+        guard !sessionStore.sessions.isEmpty else { return }
+
+        let latitudes = sessionStore.sessions.map(\.latitude)
+        let longitudes = sessionStore.sessions.map(\.longitude)
+        let minimumLatitude = latitudes.min() ?? 6.9271
+        let maximumLatitude = latitudes.max() ?? 6.9271
+        let minimumLongitude = longitudes.min() ?? 79.8612
+        let maximumLongitude = longitudes.max() ?? 79.8612
+
+        let center = CLLocationCoordinate2D(
+            latitude: (minimumLatitude + maximumLatitude) / 2,
+            longitude: (minimumLongitude + maximumLongitude) / 2
+        )
+        let latitudeDelta = max((maximumLatitude - minimumLatitude) * 1.5, 0.02)
+        let longitudeDelta = max((maximumLongitude - minimumLongitude) * 1.5, 0.02)
+
+        position = .region(
+            MKCoordinateRegion(
+                center: center,
+                span: MKCoordinateSpan(latitudeDelta: latitudeDelta, longitudeDelta: longitudeDelta)
+            )
+        )
+    }
+
+    private func mapCoordinate(for session: GameSession, index: Int) -> CLLocationCoordinate2D {
+        let duplicateCount = sessionStore.sessions[..<min(index, sessionStore.sessions.count)]
+            .filter { $0.latitude == session.latitude && $0.longitude == session.longitude }
+            .count
+
+        // Map annotations at exactly the same coordinate overlap. Spread only
+        // duplicate visual pins by a few metres; the saved session keeps its
+        // original, accurate coordinate.
+        guard duplicateCount > 0 else { return session.coordinate }
+        let angle = Double(duplicateCount) * (.pi / 3)
+        let offset = 0.00012
+        return CLLocationCoordinate2D(
+            latitude: session.latitude + cos(angle) * offset,
+            longitude: session.longitude + sin(angle) * offset
+        )
     }
 }
 
