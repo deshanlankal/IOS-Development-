@@ -6,8 +6,8 @@ struct QuizActiveView: View {
     var body: some View {
         VStack(spacing: 16) {
             HStack(spacing: 14) {
-                ScorePanel(title: "Marks", value: "\(controller.score)", tint: .orange)
-                ScorePanel(title: "Per Q", value: "+10 / -10", tint: .red)
+                ScorePanel(title: "Marks", value: controller.marksText, tint: .orange)
+                ScorePanel(title: "Correct", value: "\(controller.correctAnswers)", tint: .green)
             }
 
             HStack(spacing: 8) {
@@ -25,6 +25,12 @@ struct QuizActiveView: View {
                     .foregroundStyle(.white)
             }
             .frame(height: 26)
+
+            Text(controller.answerFeedbackText)
+                .font(.system(size: 15, weight: .black, design: .rounded))
+                .foregroundStyle(controller.answerWasCorrect == false ? .red : .green)
+                .frame(maxWidth: .infinity, minHeight: 30)
+                .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
 
             if let question = controller.currentQuestion {
                 Text(question.prompt)

@@ -1,8 +1,26 @@
 import Foundation
 
 struct TriviaService {
-    func fetchQuestions() async throws -> [QuizQuestionRound] {
-        let url = URL(string: "https://opentdb.com/api.php?amount=10&type=multiple")!
+    func fetchQuestions(category: TriviaCategory, difficulty: TriviaDifficulty) async throws -> [QuizQuestionRound] {
+        var components = URLComponents(string: "https://opentdb.com/api.php")
+        var queryItems = [
+            URLQueryItem(name: "amount", value: "10"),
+            URLQueryItem(name: "type", value: "multiple")
+        ]
+
+        if let categoryValue = category.apiValue {
+            queryItems.append(URLQueryItem(name: "category", value: categoryValue))
+        }
+
+        if let difficultyValue = difficulty.apiValue {
+            queryItems.append(URLQueryItem(name: "difficulty", value: difficultyValue))
+        }
+
+        components?.queryItems = queryItems
+
+        guard let url = components?.url else {
+            throw URLError(.badURL)
+        }
 
         let (data, response) = try await URLSession.shared.data(from: url)
 
