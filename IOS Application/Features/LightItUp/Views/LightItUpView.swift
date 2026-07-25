@@ -19,7 +19,14 @@ struct LightItUpView: View {
             GameTopBar(title: "LIGHT IT UP", icon: "lightbulb.max.fill", tint: controller.currentPhase.tint, returnToMenu: returnToMenu)
 
             if controller.isGameOver {
-                GameOverView(title: controller.lives == 0 ? "LIGHTS OUT" : "TIME UP", score: controller.score, highScore: controller.highScore, playAgain: resetRound, returnToMenu: returnToMenu)
+                GameOverView(
+                    title: controller.lives == 0 ? "LIGHTS OUT" : "TIME UP",
+                    score: controller.score,
+                    highScore: controller.highScore,
+                    shareText: "Light It Up result: \(controller.score) points, reached Level \(controller.currentPhase.rawValue), best score \(controller.highScore). Try to outplay me on PlayHub.",
+                    playAgain: resetRound,
+                    returnToMenu: returnToMenu
+                )
             } else {
                 gameContent
             }

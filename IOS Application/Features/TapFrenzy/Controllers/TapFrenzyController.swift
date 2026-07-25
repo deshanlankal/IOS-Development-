@@ -8,6 +8,7 @@ final class TapFrenzyController: ObservableObject {
     @Published private(set) var highScore = UserDefaults.standard.integer(forKey: "tapFrenzyHighScore")
 
     let round = TapFrenzyRound()
+    private var roundEndDate = Date()
 
     var isBonusBurstActive: Bool {
         round.isBonusBurstActive(remainingTime: remainingTime)
@@ -18,11 +19,12 @@ final class TapFrenzyController: ObservableObject {
         score += isBonusBurstActive ? 2 : 1
     }
 
-    func tick() {
+    func updateTimer(now: Date) {
         guard !isGameOver else { return }
 
-        if remainingTime > 1 {
-            remainingTime -= 1
+        let secondsLeft = Int(ceil(roundEndDate.timeIntervalSince(now)))
+        if secondsLeft > 0 {
+            remainingTime = min(round.roundLength, secondsLeft)
         } else {
             remainingTime = 0
             finishGame()
@@ -33,6 +35,7 @@ final class TapFrenzyController: ObservableObject {
         score = 0
         remainingTime = round.roundLength
         isGameOver = false
+        roundEndDate = Date().addingTimeInterval(TimeInterval(round.roundLength))
     }
 
     private func finishGame() {

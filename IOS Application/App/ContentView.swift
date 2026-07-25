@@ -532,72 +532,115 @@ struct SessionMapView: View {
     @EnvironmentObject private var sessionStore: SessionStore
     @EnvironmentObject private var locationService: LocationService
 
-    @State private var selectedSession: GameSession?
+    @State private var selectedCluster: SessionLocationCluster?
     @State private var position = MapCameraPosition.automatic
+    @State private var hasCenteredInitialMap = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
             Map(position: $position) {
                 UserAnnotation()
 
-                ForEach(Array(sessionStore.sessions.enumerated()), id: \.element.id) { index, session in
-                    if let coordinate = session.coordinate {
-                        Annotation(session.game.title, coordinate: mapCoordinate(for: session, coordinate: coordinate, index: index)) {
-                            Button {
-                                selectedSession = session
-                            } label: {
-                                SessionMapMarker(session: session)
-                            }
-                            .buttonStyle(.plain)
+                ForEach(locationClusters) { cluster in
+                    Annotation(cluster.title, coordinate: cluster.coordinate) {
+                        Button {
+                            selectedCluster = cluster
+                        } label: {
+                            SessionMapClusterMarker(cluster: cluster)
                         }
+                        .buttonStyle(.plain)
                     }
                 }
             }
             .mapStyle(.standard(elevation: .realistic))
             .ignoresSafeArea(edges: .bottom)
 
-            if sessionsWithLocation.isEmpty {
+            VStack {
+                HStack {
+                    Spacer()
+
+                    VStack(spacing: 8) {
+                        Button {
+                            fitMapToCurrentLocation()
+                        } label: {
+                            Label("Me", systemImage: "location.fill")
+                                .labelStyle(.iconOnly)
+                                .font(.system(size: 17, weight: .black))
+                                .foregroundStyle(.black)
+                                .frame(width: 44, height: 44)
+                                .background(.cyan, in: RoundedRectangle(cornerRadius: 8))
+                        }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            fitMapToSessions()
+                        } label: {
+                            Label("Plays", systemImage: "scope")
+                                .labelStyle(.iconOnly)
+                                .font(.system(size: 17, weight: .black))
+                                .foregroundStyle(.black)
+                                .frame(width: 44, height: 44)
+                                .background(.yellow, in: RoundedRectangle(cornerRadius: 8))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(locationClusters.isEmpty)
+                        .opacity(locationClusters.isEmpty ? 0.45 : 1)
+                    }
+                    .padding(.top, 14)
+                    .padding(.trailing, 14)
+                }
+
+                Spacer()
+            }
+
+            if locationClusters.isEmpty {
                 EmptyStateView(text: "Completed sessions will appear here after the iPhone provides a location.")
                     .padding(20)
             }
 
-            if let selectedSession {
-                SessionMapCallout(session: selectedSession)
+            if let selectedCluster {
+                SessionMapClusterCallout(cluster: selectedCluster)
                     .padding(20)
             }
         }
         .navigationTitle("Map")
         .onAppear {
             locationService.startLiveLocationUpdates()
-            fitMapToCurrentLocationOrSessions()
+            centerInitialMapIfNeeded()
         }
         .onChange(of: locationService.latestLocationDate) { _, _ in
-            fitMapToCurrentLocationOrSessions()
+            centerInitialMapIfNeeded()
         }
         .onChange(of: sessionStore.sessions) { _, _ in
-            fitMapToCurrentLocationOrSessions()
+            centerInitialMapIfNeeded()
         }
     }
 
-    private func fitMapToCurrentLocationOrSessions() {
+    private func centerInitialMapIfNeeded() {
+        guard !hasCenteredInitialMap else { return }
+
         if let coordinate = locationService.currentCoordinate {
-            position = .region(
-                MKCoordinateRegion(
-                    center: coordinate,
-                    span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
-                )
-            )
-        } else {
+            fitMap(to: coordinate, latitudeDelta: 0.02, longitudeDelta: 0.02)
+            hasCenteredInitialMap = true
+        } else if !locationClusters.isEmpty {
             fitMapToSessions()
+            hasCenteredInitialMap = true
         }
+    }
+
+    private func fitMapToCurrentLocation() {
+        locationService.startLiveLocationUpdates()
+        guard let coordinate = locationService.currentCoordinate else { return }
+        fitMap(to: coordinate, latitudeDelta: 0.02, longitudeDelta: 0.02)
+        hasCenteredInitialMap = true
     }
 
     private func fitMapToSessions() {
-        let locatedSessions = sessionsWithLocation
-        guard !locatedSessions.isEmpty else { return }
+        let clusters = locationClusters
+        guard !clusters.isEmpty else { return }
 
-        let latitudes = locatedSessions.compactMap(\.latitude)
-        let longitudes = locatedSessions.compactMap(\.longitude)
+        let latitudes = clusters.map { $0.coordinate.latitude }
+        let longitudes = clusters.map { $0.coordinate.longitude }
         guard let minimumLatitude = latitudes.min(),
               let maximumLatitude = latitudes.max(),
               let minimumLongitude = longitudes.min(),
@@ -618,66 +661,141 @@ struct SessionMapView: View {
                 span: MKCoordinateSpan(latitudeDelta: latitudeDelta, longitudeDelta: longitudeDelta)
             )
         )
+        hasCenteredInitialMap = true
     }
 
-    private var sessionsWithLocation: [GameSession] {
-        sessionStore.sessions.filter { $0.coordinate != nil }
-    }
-
-    private func mapCoordinate(for session: GameSession, coordinate: CLLocationCoordinate2D, index: Int) -> CLLocationCoordinate2D {
-        let duplicateCount = sessionStore.sessions[..<min(index, sessionStore.sessions.count)]
-            .filter { $0.latitude == session.latitude && $0.longitude == session.longitude }
-            .count
-
-        guard duplicateCount > 0 else { return coordinate }
-        let angle = Double(duplicateCount) * (.pi / 3)
-        let offset = 0.00012
-        return CLLocationCoordinate2D(
-            latitude: coordinate.latitude + cos(angle) * offset,
-            longitude: coordinate.longitude + sin(angle) * offset
+    private func fitMap(to coordinate: CLLocationCoordinate2D, latitudeDelta: CLLocationDegrees, longitudeDelta: CLLocationDegrees) {
+        position = .region(
+            MKCoordinateRegion(
+                center: coordinate,
+                span: MKCoordinateSpan(latitudeDelta: latitudeDelta, longitudeDelta: longitudeDelta)
+            )
         )
+    }
+
+    private var locationClusters: [SessionLocationCluster] {
+        let groups = Dictionary(grouping: sessionStore.sessions.compactMap { session -> (String, CLLocationCoordinate2D, GameSession)? in
+            guard let coordinate = session.coordinate else { return nil }
+            let key = String(format: "%.5f,%.5f", coordinate.latitude, coordinate.longitude)
+            return (key, coordinate, session)
+        }) { item in
+            item.0
+        }
+
+        return groups.map { key, values in
+            SessionLocationCluster(
+                id: key,
+                coordinate: values[0].1,
+                sessions: values.map(\.2).sorted { $0.timestamp > $1.timestamp }
+            )
+        }
+        .sorted { $0.latestDate > $1.latestDate }
     }
 }
 
-struct SessionMapMarker: View {
-    let session: GameSession
+struct SessionLocationCluster: Identifiable {
+    let id: String
+    let coordinate: CLLocationCoordinate2D
+    let sessions: [GameSession]
+
+    var title: String {
+        sessions.count == 1 ? sessions[0].game.title : "\(sessions.count) plays"
+    }
+
+    var totalScore: Int {
+        sessions.reduce(0) { $0 + $1.score }
+    }
+
+    var bestScore: Int {
+        sessions.map(\.score).max() ?? 0
+    }
+
+    var latestDate: Date {
+        sessions.map(\.timestamp).max() ?? .distantPast
+    }
+
+    var gameBreakdownText: String {
+        ArcadeGame.allCases
+            .compactMap { game -> String? in
+                let count = sessions.filter { $0.game == game }.count
+                return count == 0 ? nil : "\(game.title) \(count)"
+            }
+            .joined(separator: "  •  ")
+    }
+}
+
+struct SessionMapClusterMarker: View {
+    let cluster: SessionLocationCluster
 
     var body: some View {
-        VStack(spacing: 2) {
-            Image(systemName: session.game.icon)
-                .font(.system(size: 15, weight: .black))
+        VStack(spacing: 4) {
+            Image(systemName: cluster.sessions.count == 1 ? cluster.sessions[0].game.icon : "square.stack.3d.up.fill")
+                .font(.system(size: 16, weight: .black))
 
-            Text("\(session.score)")
+            Text(cluster.sessions.count == 1 ? "\(cluster.bestScore)" : "\(cluster.sessions.count)")
                 .font(.system(size: 11, weight: .black, design: .rounded))
         }
         .foregroundStyle(.black)
-        .padding(8)
-        .background(session.game.tint, in: RoundedRectangle(cornerRadius: 8))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(markerTint, in: RoundedRectangle(cornerRadius: 8))
         .shadow(radius: 6)
+    }
+
+    private var markerTint: Color {
+        cluster.sessions.count == 1 ? cluster.sessions[0].game.tint : .yellow
     }
 }
 
-struct SessionMapCallout: View {
-    let session: GameSession
+struct SessionMapClusterCallout: View {
+    let cluster: SessionLocationCluster
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: session.game.icon)
-                .foregroundStyle(.black)
-                .frame(width: 44, height: 44)
-                .background(session.game.tint, in: RoundedRectangle(cornerRadius: 8))
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                Image(systemName: cluster.sessions.count == 1 ? cluster.sessions[0].game.icon : "square.stack.3d.up.fill")
+                    .foregroundStyle(.black)
+                    .frame(width: 44, height: 44)
+                    .background(cluster.sessions.count == 1 ? cluster.sessions[0].game.tint : .yellow, in: RoundedRectangle(cornerRadius: 8))
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(session.game.title)
-                    .font(.system(size: 17, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(cluster.sessions.count == 1 ? cluster.sessions[0].game.title : "Same Place Summary")
+                        .font(.system(size: 17, weight: .black, design: .rounded))
+                        .foregroundStyle(.white)
 
-                Text("Score \(session.score) at \(session.timestamp.formatted(date: .abbreviated, time: .shortened))")
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.68))
+                    Text("\(cluster.sessions.count) play\(cluster.sessions.count == 1 ? "" : "s") • total \(cluster.totalScore) • best \(cluster.bestScore)")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.68))
+                }
+
+                Spacer()
             }
 
-            Spacer()
+            if !cluster.gameBreakdownText.isEmpty {
+                Text(cluster.gameBreakdownText)
+                    .font(.system(size: 12, weight: .black, design: .monospaced))
+                    .foregroundStyle(.yellow)
+            }
+
+            VStack(spacing: 8) {
+                ForEach(cluster.sessions.prefix(4)) { session in
+                    HStack(spacing: 10) {
+                        Text(session.game.title)
+                            .font(.system(size: 13, weight: .black, design: .rounded))
+                            .foregroundStyle(session.game.tint)
+
+                        Spacer()
+
+                        Text("\(session.score)")
+                            .font(.system(size: 13, weight: .black, design: .rounded))
+                            .foregroundStyle(.white)
+
+                        Text(session.timestamp.formatted(date: .abbreviated, time: .shortened))
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.58))
+                    }
+                }
+            }
         }
         .padding(14)
         .background(.black.opacity(0.78), in: RoundedRectangle(cornerRadius: 8))
