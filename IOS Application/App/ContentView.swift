@@ -15,204 +15,53 @@ struct ContentView: View {
             .environmentObject(sessionStore)
             .environmentObject(locationService)
             .environmentObject(notificationService)
+            .onAppear {
+                locationService.requestPermissionIfConfigured()
+            }
     }
 }
 
-// MARK: - Models
-
-enum GameMode: String, CaseIterable, Codable, Identifiable {
-    case tapFrenzy
-    case lightItUp
-    case quizRush
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .tapFrenzy: "TapFrenzy"
-        case .lightItUp: "LightItUp"
-        case .quizRush: "QuizRush"
-        }
-    }
-
-    var displayTitle: String {
-        switch self {
-        case .tapFrenzy: "Tap Frenzy"
-        case .lightItUp: "Light It Up"
-        case .quizRush: "Quiz Rush"
-        }
-    }
-
-    var subtitle: String {
-        switch self {
-        case .tapFrenzy: "Tap as fast as possible before the timer ends."
-        case .lightItUp: "Hit glowing tiles before they fade away."
-        case .quizRush: "Answer multiple-choice trivia for marks."
-        }
-    }
-
-    var symbolName: String {
-        switch self {
-        case .tapFrenzy: "hand.tap.fill"
-        case .lightItUp: "lightbulb.max.fill"
-        case .quizRush: "questionmark.circle.fill"
-        }
-    }
-
-    var tint: Color {
-        switch self {
-        case .tapFrenzy: .cyan
-        case .lightItUp: .yellow
-        case .quizRush: .mint
-        }
-    }
-}
+// MARK: - Shared Models
 
 struct GameSession: Identifiable, Codable, Hashable {
     let id: UUID
-    let mode: GameMode
+    let game: ArcadeGame
     let score: Int
     let timestamp: Date
-    let latitude: Double
-    let longitude: Double
+    let latitude: Double?
+    let longitude: Double?
 
-    init(id: UUID = UUID(), mode: GameMode, score: Int, timestamp: Date = Date(), latitude: Double, longitude: Double) {
+    init(id: UUID = UUID(), game: ArcadeGame, score: Int, timestamp: Date = Date(), coordinate: CLLocationCoordinate2D?) {
         self.id = id
-        self.mode = mode
+        self.game = game
         self.score = score
         self.timestamp = timestamp
-        self.latitude = latitude
-        self.longitude = longitude
+        self.latitude = coordinate?.latitude
+        self.longitude = coordinate?.longitude
     }
 
-    var coordinate: CLLocationCoordinate2D {
-        CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    var coordinate: CLLocationCoordinate2D? {
+        guard let latitude, let longitude else { return nil }
+        return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
 
     var shareText: String {
-        "I just scored \(score) in \(mode.displayTitle) on PlayHub."
+        "I just scored \(score) in \(game.title) on PlayHub."
     }
 }
 
-struct ModeStats: Identifiable {
-    let mode: GameMode
+struct GameStats: Identifiable {
+    let game: ArcadeGame
     let sessions: [GameSession]
 
-    var id: GameMode { mode }
+    var id: ArcadeGame { game }
     var plays: Int { sessions.count }
     var totalScore: Int { sessions.reduce(0) { $0 + $1.score } }
     var bestScore: Int { sessions.map(\.score).max() ?? 0 }
     var averageScore: Int { plays == 0 ? 0 : totalScore / plays }
 }
 
-struct TriviaQuestion: Identifiable, Codable {
-    let id: UUID
-    let prompt: String
-    let correctAnswer: String
-    let answers: [String]
-
-    init(id: UUID = UUID(), prompt: String, correctAnswer: String, answers: [String]) {
-        self.id = id
-        self.prompt = prompt
-        self.correctAnswer = correctAnswer
-        self.answers = answers
-    }
-}
-
-enum TriviaDifficulty: String, CaseIterable, Identifiable {
-    case any
-    case easy
-    case medium
-    case hard
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .any: "Mixed"
-        case .easy: "Easy"
-        case .medium: "Medium"
-        case .hard: "Hard"
-        }
-    }
-
-    var subtitle: String {
-        switch self {
-        case .any: "A surprise mix of question levels."
-        case .easy: "Best for a relaxed warm-up round."
-        case .medium: "Balanced questions with a fair challenge."
-        case .hard: "Tough questions for higher scores."
-        }
-    }
-
-    var symbolName: String {
-        switch self {
-        case .any: "shuffle"
-        case .easy: "leaf.fill"
-        case .medium: "target"
-        case .hard: "flame.fill"
-        }
-    }
-
-    var apiValue: String? {
-        self == .any ? nil : rawValue
-    }
-}
-
-struct TriviaCategory: Identifiable, Hashable {
-    let id: Int?
-    let title: String
-
-    var apiValue: String? {
-        id.map(String.init)
-    }
-
-    static let all: [TriviaCategory] = [
-        TriviaCategory(id: nil, title: "Any Category"),
-        TriviaCategory(id: 9, title: "General Knowledge"),
-        TriviaCategory(id: 10, title: "Entertainment: Books"),
-        TriviaCategory(id: 11, title: "Entertainment: Film"),
-        TriviaCategory(id: 12, title: "Entertainment: Music"),
-        TriviaCategory(id: 13, title: "Entertainment: Musicals & Theatres"),
-        TriviaCategory(id: 14, title: "Entertainment: Television"),
-        TriviaCategory(id: 15, title: "Entertainment: Video Games"),
-        TriviaCategory(id: 16, title: "Entertainment: Board Games"),
-        TriviaCategory(id: 17, title: "Science & Nature"),
-        TriviaCategory(id: 18, title: "Science: Computers"),
-        TriviaCategory(id: 19, title: "Science: Mathematics"),
-        TriviaCategory(id: 20, title: "Mythology"),
-        TriviaCategory(id: 21, title: "Sports"),
-        TriviaCategory(id: 22, title: "Geography"),
-        TriviaCategory(id: 23, title: "History"),
-        TriviaCategory(id: 24, title: "Politics"),
-        TriviaCategory(id: 25, title: "Art"),
-        TriviaCategory(id: 26, title: "Celebrities"),
-        TriviaCategory(id: 27, title: "Animals"),
-        TriviaCategory(id: 28, title: "Vehicles"),
-        TriviaCategory(id: 29, title: "Entertainment: Comics"),
-        TriviaCategory(id: 30, title: "Science: Gadgets"),
-        TriviaCategory(id: 31, title: "Entertainment: Japanese Anime & Manga"),
-        TriviaCategory(id: 32, title: "Entertainment: Cartoon & Animations")
-    ]
-}
-
-private struct TriviaAPIResponse: Decodable {
-    let results: [TriviaAPIQuestion]
-}
-
-private struct TriviaAPIQuestion: Decodable {
-    let question: String
-    let correctAnswer: String
-    let incorrectAnswers: [String]
-
-    enum CodingKeys: String, CodingKey {
-        case question
-        case correctAnswer = "correct_answer"
-        case incorrectAnswers = "incorrect_answers"
-    }
-}
-
-// MARK: - Services
+// MARK: - Shared Services
 
 @MainActor
 final class SessionStore: ObservableObject {
@@ -224,10 +73,8 @@ final class SessionStore: ObservableObject {
         load()
     }
 
-    func record(mode: GameMode, score: Int, coordinate: CLLocationCoordinate2D) -> GameSession {
-        let session = GameSession(mode: mode, score: score, latitude: coordinate.latitude, longitude: coordinate.longitude)
-        // Keep every completed play. Do not replace an existing session when a
-        // later game is played at the same coordinate.
+    func record(game: ArcadeGame, score: Int, coordinate: CLLocationCoordinate2D?) -> GameSession {
+        let session = GameSession(game: game, score: score, coordinate: coordinate)
         sessions.append(session)
         save()
         return session
@@ -236,14 +83,17 @@ final class SessionStore: ObservableObject {
     func reset() {
         sessions.removeAll()
         UserDefaults.standard.removeObject(forKey: storageKey)
+        ArcadeGame.allCases.forEach { game in
+            UserDefaults.standard.removeObject(forKey: game.highScoreKey)
+        }
     }
 
-    func stats(for mode: GameMode) -> ModeStats {
-        ModeStats(mode: mode, sessions: sessions.filter { $0.mode == mode })
+    func stats(for game: ArcadeGame) -> GameStats {
+        GameStats(game: game, sessions: sessions.filter { $0.game == game })
     }
 
-    var allStats: [ModeStats] {
-        GameMode.allCases.map { stats(for: $0) }
+    var allStats: [GameStats] {
+        ArcadeGame.allCases.map { stats(for: $0) }
     }
 
     var totalScore: Int {
@@ -269,12 +119,18 @@ final class SessionStore: ObservableObject {
 final class LocationService: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published var authorizationMessage = "Enable Location so new scores are saved where you play."
     @Published private(set) var latestCoordinate: CLLocationCoordinate2D?
+    @Published private(set) var latestHorizontalAccuracy: CLLocationAccuracy?
+    @Published private(set) var latestLocationDate: Date?
 
     private let manager = CLLocationManager()
+    private var pendingLocationContinuation: CheckedContinuation<CLLocationCoordinate2D?, Never>?
+
     override init() {
         super.init()
         manager.delegate = self
-        manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+        manager.desiredAccuracy = kCLLocationAccuracyBest
+        manager.distanceFilter = kCLDistanceFilterNone
+        manager.activityType = .other
         requestPermissionIfConfigured()
     }
 
@@ -282,15 +138,76 @@ final class LocationService: NSObject, ObservableObject, CLLocationManagerDelega
         latestCoordinate ?? manager.location?.coordinate
     }
 
+    var hasLocationPermission: Bool {
+        switch manager.authorizationStatus {
+        case .authorizedAlways, .authorizedWhenInUse:
+            return true
+        default:
+            return false
+        }
+    }
+
+    var authorizationStatusText: String {
+        switch manager.authorizationStatus {
+        case .authorizedAlways:
+            return "Always"
+        case .authorizedWhenInUse:
+            return "While Using"
+        case .denied:
+            return "Denied"
+        case .restricted:
+            return "Restricted"
+        case .notDetermined:
+            return "Not Requested"
+        @unknown default:
+            return "Unknown"
+        }
+    }
+
+    var accuracyAuthorizationText: String {
+        switch manager.accuracyAuthorization {
+        case .fullAccuracy:
+            return "Precise"
+        case .reducedAccuracy:
+            return "Approximate"
+        @unknown default:
+            return "Unknown"
+        }
+    }
+
+    var accuracySummary: String {
+        guard let latestHorizontalAccuracy else {
+            return "No location fix yet."
+        }
+
+        let meters = Int(latestHorizontalAccuracy.rounded())
+        if let latestLocationDate {
+            return "Last fix: ±\(meters)m at \(latestLocationDate.formatted(date: .omitted, time: .shortened))."
+        }
+
+        return "Last fix: ±\(meters)m."
+    }
+
+    var coordinateSummary: String {
+        guard let coordinate = currentCoordinate else {
+            return "Coordinate unavailable."
+        }
+
+        return String(format: "Lat %.5f, Lon %.5f", coordinate.latitude, coordinate.longitude)
+    }
+
     func requestPermissionIfConfigured() {
         guard Bundle.main.object(forInfoDictionaryKey: "NSLocationWhenInUseUsageDescription") != nil else {
-            authorizationMessage = "Location permission is not configured. New results will not be saved until it is enabled."
+            authorizationMessage = "Missing NSLocationWhenInUseUsageDescription in Target Info. iOS cannot show the location permission prompt until this is added."
             return
         }
 
         switch manager.authorizationStatus {
         case .authorizedAlways, .authorizedWhenInUse:
-            manager.requestLocation()
+            authorizationMessage = manager.accuracyAuthorization == .fullAccuracy
+                ? "Location enabled with precise accuracy."
+                : "Location enabled with approximate accuracy. Turn on Precise Location in Settings for better map pins."
+            startLiveLocationUpdates()
         case .notDetermined:
             manager.requestWhenInUseAuthorization()
         default:
@@ -298,21 +215,76 @@ final class LocationService: NSObject, ObservableObject, CLLocationManagerDelega
         }
     }
 
-    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let coordinate = locations.last?.coordinate else { return }
-        Task { @MainActor in
-            latestCoordinate = coordinate
+    func startLiveLocationUpdates() {
+        guard hasLocationPermission else {
+            requestPermissionIfConfigured()
+            return
+        }
+
+        manager.startUpdatingLocation()
+        manager.requestLocation()
+    }
+
+    func coordinateForNewScore() async -> CLLocationCoordinate2D? {
+        requestPermissionIfConfigured()
+
+        if let latestCoordinate, let latestLocationDate, Date().timeIntervalSince(latestLocationDate) < 120 {
+            return latestCoordinate
+        }
+
+        guard hasLocationPermission else {
+            return currentCoordinate
+        }
+
+        return await withCheckedContinuation { continuation in
+            pendingLocationContinuation?.resume(returning: currentCoordinate)
+            pendingLocationContinuation = continuation
+            manager.requestLocation()
+
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(4))
+                guard let pendingLocationContinuation else { return }
+                self.pendingLocationContinuation = nil
+                pendingLocationContinuation.resume(returning: currentCoordinate)
+            }
         }
     }
 
-    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) { }
+    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let location = locations.last else { return }
+        Task { @MainActor in
+            latestCoordinate = location.coordinate
+            latestHorizontalAccuracy = location.horizontalAccuracy
+            latestLocationDate = location.timestamp
+            authorizationMessage = manager.accuracyAuthorization == .fullAccuracy
+                ? "Location ready. New scores will use your current coordinate."
+                : "Approximate location ready. Enable Precise Location for better map pins."
+
+            if let pendingLocationContinuation {
+                self.pendingLocationContinuation = nil
+                pendingLocationContinuation.resume(returning: location.coordinate)
+            }
+        }
+    }
+
+    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        Task { @MainActor in
+            authorizationMessage = "Could not get your location right now. New scores will use the fallback coordinate."
+            if let pendingLocationContinuation {
+                self.pendingLocationContinuation = nil
+                pendingLocationContinuation.resume(returning: currentCoordinate)
+            }
+        }
+    }
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         Task { @MainActor in
             switch manager.authorizationStatus {
             case .authorizedAlways, .authorizedWhenInUse:
-                authorizationMessage = "Location enabled. New results can use your current coordinate."
-                manager.requestLocation()
+                authorizationMessage = manager.accuracyAuthorization == .fullAccuracy
+                    ? "Location enabled with precise accuracy."
+                    : "Location enabled with approximate accuracy. Turn on Precise Location in Settings for better map pins."
+                startLiveLocationUpdates()
             case .denied, .restricted:
                 authorizationMessage = "Location is disabled. Enable it in Settings to save the real play location."
             case .notDetermined:
@@ -331,30 +303,29 @@ final class NotificationService: ObservableObject {
     private let reminderIdentifier = "playHubDailyReminder"
 
     func scheduleDailyReminder(at date: Date) async {
-        do {
-            let center = UNUserNotificationCenter.current()
-            let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
+        let center = UNUserNotificationCenter.current()
 
+        do {
+            let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
             guard granted else {
-                statusMessage = "Notification permission was not granted."
+                statusMessage = "Notifications are disabled in Settings."
                 return
             }
 
-            center.removePendingNotificationRequests(withIdentifiers: [reminderIdentifier])
-
+            let components = Calendar.current.dateComponents([.hour, .minute], from: date)
             let content = UNMutableNotificationContent()
-            content.title = "PlayHub challenge"
-            content.body = "Play a quick round and beat your best score."
+            content.title = "PlayHub is ready"
+            content.body = "Play a quick round and grow your stats."
             content.sound = .default
 
-            let components = Calendar.current.dateComponents([.hour, .minute], from: date)
             let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
             let request = UNNotificationRequest(identifier: reminderIdentifier, content: content, trigger: trigger)
 
+            center.removePendingNotificationRequests(withIdentifiers: [reminderIdentifier])
             try await center.add(request)
-            statusMessage = "Daily reminder scheduled."
+            statusMessage = "Daily reminder set for \(date.formatted(date: .omitted, time: .shortened))."
         } catch {
-            statusMessage = "Could not schedule reminder."
+            statusMessage = "Could not schedule reminders right now."
         }
     }
 
@@ -364,700 +335,87 @@ final class NotificationService: ObservableObject {
     }
 }
 
-struct TriviaService {
-    func fetchQuestions(category: TriviaCategory, difficulty: TriviaDifficulty) async -> [TriviaQuestion] {
-        var components = URLComponents(string: "https://opentdb.com/api.php")
-        var queryItems = [
-            URLQueryItem(name: "amount", value: "5"),
-            URLQueryItem(name: "type", value: "multiple")
-        ]
-
-        if let categoryValue = category.apiValue {
-            queryItems.append(URLQueryItem(name: "category", value: categoryValue))
-        }
-
-        if let difficultyValue = difficulty.apiValue {
-            queryItems.append(URLQueryItem(name: "difficulty", value: difficultyValue))
-        }
-
-        components?.queryItems = queryItems
-
-        guard let url = components?.url else {
-            return Self.fallbackQuestions
-        }
-
-        do {
-            let (data, response) = try await URLSession.shared.data(from: url)
-            guard let httpResponse = response as? HTTPURLResponse, 200..<300 ~= httpResponse.statusCode else {
-                return Self.fallbackQuestions
-            }
-
-            let decoded = try JSONDecoder().decode(TriviaAPIResponse.self, from: data)
-            let questions = decoded.results.map { apiQuestion in
-                let correct = apiQuestion.correctAnswer.decodedHTML
-                let answers = ([apiQuestion.correctAnswer] + apiQuestion.incorrectAnswers)
-                    .map(\.decodedHTML)
-                    .shuffled()
-
-                return TriviaQuestion(prompt: apiQuestion.question.decodedHTML, correctAnswer: correct, answers: answers)
-            }
-
-            return questions.isEmpty ? Self.fallbackQuestions : questions
-        } catch {
-            return Self.fallbackQuestions
-        }
-    }
-
-    private static let fallbackQuestions = [
-        TriviaQuestion(prompt: "Which framework builds declarative iOS interfaces?", correctAnswer: "SwiftUI", answers: ["SwiftUI", "SpriteKit", "CloudKit", "MapKit"]),
-        TriviaQuestion(prompt: "Which Apple framework displays maps?", correctAnswer: "MapKit", answers: ["MapKit", "Charts", "Photos", "StoreKit"]),
-        TriviaQuestion(prompt: "What type is commonly used for unique model IDs?", correctAnswer: "UUID", answers: ["UUID", "URL", "Int8", "CGFloat"]),
-        TriviaQuestion(prompt: "Which framework schedules local notifications?", correctAnswer: "UserNotifications", answers: ["UserNotifications", "CoreMotion", "AVKit", "RealityKit"]),
-        TriviaQuestion(prompt: "Which property wrapper stores simple settings?", correctAnswer: "AppStorage", answers: ["AppStorage", "GestureState", "Namespace", "SceneStorage"])
-    ]
-}
-
-extension String {
-    var decodedHTML: String {
-        guard let data = data(using: .utf8) else { return self }
-
-        let options: [NSAttributedString.DocumentReadingOptionKey: Any] = [
-            .documentType: NSAttributedString.DocumentType.html,
-            .characterEncoding: String.Encoding.utf8.rawValue
-        ]
-
-        return (try? NSAttributedString(data: data, options: options, documentAttributes: nil).string) ?? self
-    }
-}
-
-// MARK: - View Models
-
-@MainActor
-final class GameRouter: ObservableObject {
-    @Published var selectedMode: GameMode?
-    @Published var completedSession: GameSession?
-}
-
-@MainActor
-final class TapFrenzyViewModel: ObservableObject {
-    @Published var score = 0
-    @Published var remainingTime = 10
-    @Published var isFinished = false
-
-    var buttonSize: CGFloat {
-        90 + (CGFloat(remainingTime) / 10 * 150)
-    }
-
-    var isBonusActive: Bool {
-        remainingTime == 5 || remainingTime == 4
-    }
-
-    func start() {
-        score = 0
-        remainingTime = 10
-        isFinished = false
-    }
-
-    func tap() {
-        guard !isFinished else { return }
-        score += isBonusActive ? 2 : 1
-    }
-
-    func tick() {
-        guard !isFinished else { return }
-
-        if remainingTime > 0 {
-            remainingTime -= 1
-        }
-
-        if remainingTime == 0 {
-            isFinished = true
-        }
-    }
-}
-
-@MainActor
-final class LightItUpViewModel: ObservableObject {
-    @Published var score = 0
-    @Published var lives = 3
-    @Published var remainingTime = 30
-    @Published var activeTiles: Set<Int> = []
-    @Published var level = 1
-    @Published var isFinished = false
-
-    private var tickCount = 0
-
-    var tileCount: Int { level < 3 ? 6 : 9 }
-    var activeTileCount: Int { min(level, 3) }
-    var tint: Color { level == 1 ? .yellow : level == 2 ? .orange : .red }
-
-    func start() {
-        score = 0
-        lives = 3
-        remainingTime = 30
-        activeTiles = []
-        level = 1
-        tickCount = 0
-        isFinished = false
-        spawnTiles()
-    }
-
-    func tapTile(_ tile: Int) {
-        guard !isFinished else { return }
-
-        if activeTiles.contains(tile) {
-            score += level * 10
-            activeTiles.remove(tile)
-            if activeTiles.isEmpty {
-                spawnTiles()
-            }
-        } else {
-            lives -= 1
-            if lives <= 0 {
-                isFinished = true
-            }
-        }
-    }
-
-    func tick() {
-        guard !isFinished else { return }
-
-        tickCount += 1
-        remainingTime -= 1
-
-        if remainingTime <= 20 { level = max(level, 2) }
-        if remainingTime <= 10 { level = max(level, 3) }
-
-        if tickCount.isMultiple(of: max(2, 5 - level)) {
-            spawnTiles()
-        }
-
-        if remainingTime <= 0 {
-            isFinished = true
-        }
-    }
-
-    private func spawnTiles() {
-        let range = 0..<tileCount
-        activeTiles = Set(range.shuffled().prefix(activeTileCount))
-    }
-}
-
-@MainActor
-final class QuizRushViewModel: ObservableObject {
-    @Published var questions: [TriviaQuestion] = []
-    @Published var currentIndex = 0
-    @Published var score = 0
-    @Published var selectedAnswer: String?
-    @Published var isLoading = false
-    @Published var isFinished = false
-    @Published var hasStarted = false
-    @Published var selectedCategory = TriviaCategory.all[0]
-    @Published var selectedDifficulty = TriviaDifficulty.any
-
-    private let service = TriviaService()
-
-    var currentQuestion: TriviaQuestion? {
-        guard questions.indices.contains(currentIndex) else { return nil }
-        return questions[currentIndex]
-    }
-
-    var progressText: String {
-        "Question \(min(currentIndex + 1, questions.count)) of \(questions.count)"
-    }
-
-    func start() async {
-        hasStarted = true
-        isLoading = true
-        questions = await service.fetchQuestions(category: selectedCategory, difficulty: selectedDifficulty)
-        currentIndex = 0
-        score = 0
-        selectedAnswer = nil
-        isFinished = false
-        isLoading = false
-    }
-
-    func choose(_ answer: String) {
-        guard selectedAnswer == nil, let question = currentQuestion else { return }
-
-        selectedAnswer = answer
-        score += answer == question.correctAnswer ? 10 : -10
-
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(550))
-            selectedAnswer = nil
-
-            if currentIndex + 1 < questions.count {
-                currentIndex += 1
-            } else {
-                isFinished = true
-            }
-        }
-    }
-}
-
 // MARK: - App Shell
 
 struct AppShellView: View {
-    var body: some View {
-        TabView {
-            NavigationStack {
-                HomeView()
-            }
-            .tabItem {
-                Label("Home", systemImage: "house.fill")
-            }
-
-            NavigationStack {
-                StatsView()
-            }
-            .tabItem {
-                Label("Stats", systemImage: "chart.bar.fill")
-            }
-
-            NavigationStack {
-                SessionMapView()
-            }
-            .tabItem {
-                Label("Map", systemImage: "map.fill")
-            }
-
-            NavigationStack {
-                SettingsView()
-            }
-            .tabItem {
-                Label("Settings", systemImage: "gearshape.fill")
-            }
-        }
-    }
-}
-
-struct HomeView: View {
-    @EnvironmentObject private var sessionStore: SessionStore
-    @StateObject private var router = GameRouter()
+    @State private var selectedGame: ArcadeGame?
 
     var body: some View {
         ZStack {
-            PlayHubBackground()
+            SpaceBackground()
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    HeaderView()
-
-                    ForEach(GameMode.allCases) { mode in
-                        NavigationLink {
-                            GameHostView(mode: mode)
-                                .environmentObject(router)
-                        } label: {
-                            GameModeCard(mode: mode, bestScore: sessionStore.stats(for: mode).bestScore)
+            if let selectedGame {
+                GameHostView(game: selectedGame) {
+                    self.selectedGame = nil
+                }
+                .transition(.opacity)
+            } else {
+                TabView {
+                    ArcadeHubView { game in
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            selectedGame = game
                         }
-                        .buttonStyle(.plain)
+                    }
+                    .tabItem {
+                        Label("Home", systemImage: "house.fill")
+                    }
+
+                    NavigationStack {
+                        StatsView()
+                    }
+                    .tabItem {
+                        Label("Stats", systemImage: "chart.bar.fill")
+                    }
+
+                    NavigationStack {
+                        SessionMapView()
+                    }
+                    .tabItem {
+                        Label("Map", systemImage: "map.fill")
+                    }
+
+                    NavigationStack {
+                        SettingsView()
+                    }
+                    .tabItem {
+                        Label("Settings", systemImage: "gearshape.fill")
                     }
                 }
-                .padding(20)
+                .toolbarBackground(.black.opacity(0.55), for: .tabBar)
+                .toolbarBackground(.visible, for: .tabBar)
             }
         }
-        .navigationTitle("PlayHub")
-        .environmentObject(router)
-    }
-}
-
-struct HeaderView: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("COHNDSE251F iOS Games", systemImage: "gamecontroller.fill")
-                .font(.system(size: 14, weight: .black, design: .monospaced))
-                .foregroundStyle(.cyan)
-
-            Text("Choose a game mode")
-                .font(.system(size: 34, weight: .black, design: .rounded))
-                .foregroundStyle(.white)
-
-            Text("Sessions are saved for stats, maps, and sharing.")
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
-                .foregroundStyle(.white.opacity(0.7))
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(18)
-        .background(.black.opacity(0.32), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(.cyan.opacity(0.35), lineWidth: 1)
-        )
-    }
-}
-
-struct GameModeCard: View {
-    let mode: GameMode
-    let bestScore: Int
-
-    var body: some View {
-        HStack(spacing: 16) {
-            Image(systemName: mode.symbolName)
-                .font(.system(size: 30, weight: .black))
-                .foregroundStyle(.black)
-                .frame(width: 60, height: 60)
-                .background(mode.tint, in: RoundedRectangle(cornerRadius: 8))
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text(mode.displayTitle)
-                    .font(.system(size: 22, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
-
-                Text(mode.subtitle)
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.68))
-                    .lineLimit(2)
-            }
-
-            Spacer()
-
-            VStack(alignment: .trailing, spacing: 4) {
-                Text("BEST")
-                    .font(.system(size: 11, weight: .black, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.62))
-
-                Text("\(bestScore)")
-                    .font(.system(size: 24, weight: .black, design: .rounded))
-                    .foregroundStyle(mode.tint)
-            }
-        }
-        .padding(16)
-        .background(.black.opacity(0.34), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(mode.tint.opacity(0.48), lineWidth: 1)
-        )
     }
 }
 
 struct GameHostView: View {
-    let mode: GameMode
+    let game: ArcadeGame
+    let returnToMenu: () -> Void
 
-    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var sessionStore: SessionStore
     @EnvironmentObject private var locationService: LocationService
-    @State private var completedSession: GameSession?
-    @State private var hasRecordedResult = false
 
     var body: some View {
-        ZStack {
-            PlayHubBackground()
-
-            if let completedSession {
-                ResultView(session: completedSession) {
-                    self.completedSession = nil
-                } exit: {
-                    dismiss()
-                }
-                .padding(20)
-            } else {
-                gameView
-                    .padding(20)
+        Group {
+            switch game {
+            case .tapFrenzy:
+                TapFrenzyView(returnToMenu: returnToMenu, onComplete: recordScore)
+            case .lightItUp:
+                LightItUpView(returnToMenu: returnToMenu, onComplete: recordScore)
+            case .quizRush:
+                QuizRushView(returnToMenu: returnToMenu, onComplete: recordScore)
             }
         }
-        .navigationTitle(mode.displayTitle)
-        .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             locationService.requestPermissionIfConfigured()
         }
     }
 
-    @ViewBuilder
-    private var gameView: some View {
-        switch mode {
-        case .tapFrenzy:
-            TapFrenzyGameView { score in
-                finish(score: score)
-            }
-        case .lightItUp:
-            LightItUpGameView { score in
-                finish(score: score)
-            }
-        case .quizRush:
-            QuizRushGameView { score in
-                finish(score: score)
-            }
+    private func recordScore(_ score: Int) {
+        Task {
+            let coordinate = await locationService.coordinateForNewScore()
+            _ = sessionStore.record(game: game, score: score, coordinate: coordinate)
         }
-    }
-
-    private func finish(score: Int) {
-        // A game can emit its completion callback from more than one state
-        // transition. Only create one saved session for each game screen.
-        guard !hasRecordedResult else { return }
-        hasRecordedResult = true
-
-        let coordinate = locationService.currentCoordinate ?? CLLocationCoordinate2D(latitude: 6.9271, longitude: 79.8612)
-        completedSession = sessionStore.record(mode: mode, score: score, coordinate: coordinate)
-    }
-}
-
-// MARK: - Games
-
-struct TapFrenzyGameView: View {
-    let onComplete: (Int) -> Void
-
-    @StateObject private var viewModel = TapFrenzyViewModel()
-    private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
-
-    var body: some View {
-        VStack(spacing: 22) {
-            GameTopBar(title: "Tap Frenzy", symbol: "hand.tap.fill", tint: .cyan)
-
-            HStack(spacing: 12) {
-                ScoreBadge(title: "Score", value: "\(viewModel.score)", tint: .cyan)
-                ScoreBadge(title: "Time", value: "\(viewModel.remainingTime)s", tint: .mint)
-            }
-
-            Text(viewModel.isBonusActive ? "DOUBLE POINTS" : "TAP AS FAST AS YOU CAN")
-                .font(.system(size: 15, weight: .black, design: .monospaced))
-                .foregroundStyle(viewModel.isBonusActive ? .yellow : .cyan)
-                .frame(height: 26)
-
-            Spacer()
-
-            Button(action: viewModel.tap) {
-                Text("TAP")
-                    .font(.system(size: 42, weight: .black, design: .rounded))
-                    .foregroundStyle(.black)
-                    .frame(width: viewModel.buttonSize, height: viewModel.buttonSize)
-                    .background(viewModel.isBonusActive ? .yellow : .cyan, in: Circle())
-                    .shadow(color: (viewModel.isBonusActive ? Color.yellow : Color.cyan).opacity(0.65), radius: 24)
-            }
-            .buttonStyle(.plain)
-            .animation(.spring(response: 0.25, dampingFraction: 0.75), value: viewModel.buttonSize)
-
-            Spacer()
-        }
-        .onAppear(perform: viewModel.start)
-        .onReceive(timer) { _ in
-            viewModel.tick()
-            if viewModel.isFinished {
-                onComplete(viewModel.score)
-            }
-        }
-    }
-}
-
-struct LightItUpGameView: View {
-    let onComplete: (Int) -> Void
-
-    @StateObject private var viewModel = LightItUpViewModel()
-    private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
-
-    private var columns: [GridItem] {
-        Array(repeating: GridItem(.flexible(), spacing: 12), count: 3)
-    }
-
-    var body: some View {
-        VStack(spacing: 18) {
-            GameTopBar(title: "Light It Up", symbol: "lightbulb.max.fill", tint: viewModel.tint)
-
-            HStack(spacing: 12) {
-                ScoreBadge(title: "Score", value: "\(viewModel.score)", tint: viewModel.tint)
-                ScoreBadge(title: "Time", value: "\(viewModel.remainingTime)s", tint: .mint)
-            }
-
-            HStack {
-                ForEach(0..<3, id: \.self) { index in
-                    Image(systemName: index < viewModel.lives ? "heart.fill" : "heart.slash.fill")
-                        .foregroundStyle(index < viewModel.lives ? .red : .gray)
-                }
-
-                Spacer()
-
-                Text("LEVEL \(viewModel.level)")
-                    .font(.system(size: 14, weight: .black, design: .monospaced))
-                    .foregroundStyle(viewModel.tint)
-            }
-
-            LazyVGrid(columns: columns, spacing: 12) {
-                ForEach(0..<viewModel.tileCount, id: \.self) { tile in
-                    Button {
-                        viewModel.tapTile(tile)
-                        if viewModel.isFinished {
-                            onComplete(viewModel.score)
-                        }
-                    } label: {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(viewModel.activeTiles.contains(tile) ? viewModel.tint : .white.opacity(0.10))
-                            .aspectRatio(1, contentMode: .fit)
-                            .overlay {
-                                Image(systemName: viewModel.activeTiles.contains(tile) ? "sparkle" : "square.grid.3x3")
-                                    .font(.system(size: 24, weight: .black))
-                                    .foregroundStyle(viewModel.activeTiles.contains(tile) ? .black : .white.opacity(0.2))
-                            }
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-
-            Text("Tap lit tiles only. Wrong taps cost lives.")
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundStyle(.white.opacity(0.64))
-
-            Spacer()
-        }
-        .onAppear(perform: viewModel.start)
-        .onReceive(timer) { _ in
-            viewModel.tick()
-            if viewModel.isFinished {
-                onComplete(viewModel.score)
-            }
-        }
-    }
-}
-
-struct QuizRushGameView: View {
-    let onComplete: (Int) -> Void
-
-    @StateObject private var viewModel = QuizRushViewModel()
-
-    var body: some View {
-        VStack(spacing: 18) {
-            GameTopBar(title: "Quiz Rush", symbol: "questionmark.circle.fill", tint: .mint)
-
-            if !viewModel.hasStarted {
-                quizSetup
-            } else if viewModel.isLoading {
-                Spacer()
-                ProgressView("Loading trivia")
-                    .tint(.mint)
-                    .foregroundStyle(.white)
-                Spacer()
-            } else if let question = viewModel.currentQuestion {
-                HStack(spacing: 12) {
-                    ScoreBadge(title: "Marks", value: "\(viewModel.score)", tint: .mint)
-                    ScoreBadge(title: "Round", value: viewModel.progressText, tint: .red)
-                }
-
-                Text(question.prompt)
-                    .font(.system(size: 22, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
-                    .minimumScaleFactor(0.72)
-                    .frame(maxWidth: .infinity, minHeight: 120)
-                    .padding(16)
-                    .background(.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
-
-                VStack(spacing: 12) {
-                    ForEach(question.answers, id: \.self) { answer in
-                        Button {
-                            viewModel.choose(answer)
-                        } label: {
-                            Text(answer)
-                                .font(.system(size: 16, weight: .black, design: .rounded))
-                                .foregroundStyle(.white)
-                                .multilineTextAlignment(.center)
-                                .frame(maxWidth: .infinity, minHeight: 54)
-                                .padding(.horizontal, 12)
-                                .background(answerColor(answer, question: question), in: RoundedRectangle(cornerRadius: 8))
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(viewModel.selectedAnswer != nil)
-                    }
-                }
-
-                Spacer()
-            }
-        }
-        .onChange(of: viewModel.isFinished) { _, isFinished in
-            if isFinished {
-                onComplete(viewModel.score)
-            }
-        }
-    }
-
-    private var quizSetup: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("Choose Quiz Options")
-                .font(.system(size: 26, weight: .black, design: .rounded))
-                .foregroundStyle(.white)
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Category")
-                    .font(.system(size: 12, weight: .black, design: .monospaced))
-                    .foregroundStyle(.mint)
-
-                Picker("Category", selection: $viewModel.selectedCategory) {
-                    ForEach(TriviaCategory.all) { category in
-                        Text(category.title).tag(category)
-                    }
-                }
-                .pickerStyle(.menu)
-                .tint(.mint)
-            }
-
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Difficulty")
-                    .font(.system(size: 12, weight: .black, design: .monospaced))
-                    .foregroundStyle(.mint)
-
-                ForEach(TriviaDifficulty.allCases) { difficulty in
-                    Button {
-                        viewModel.selectedDifficulty = difficulty
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: difficulty.symbolName)
-                                .font(.system(size: 15, weight: .black))
-                                .foregroundStyle(viewModel.selectedDifficulty == difficulty ? .black : .mint)
-                                .frame(width: 34, height: 34)
-                                .background(viewModel.selectedDifficulty == difficulty ? .mint : .white.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
-
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(difficulty.title)
-                                    .font(.system(size: 16, weight: .black, design: .rounded))
-                                    .foregroundStyle(.white)
-
-                                Text(difficulty.subtitle)
-                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                                    .foregroundStyle(.white.opacity(0.65))
-                                    .multilineTextAlignment(.leading)
-                            }
-
-                            Spacer()
-
-                            if viewModel.selectedDifficulty == difficulty {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .font(.system(size: 20, weight: .bold))
-                                    .foregroundStyle(.mint)
-                            }
-                        }
-                        .padding(12)
-                        .background(.white.opacity(viewModel.selectedDifficulty == difficulty ? 0.16 : 0.08), in: RoundedRectangle(cornerRadius: 8))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(viewModel.selectedDifficulty == difficulty ? .mint.opacity(0.85) : .white.opacity(0.12), lineWidth: 1)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-
-            Button {
-                Task {
-                    await viewModel.start()
-                }
-            } label: {
-                Label("Start Quiz", systemImage: "play.fill")
-                    .font(.system(size: 18, weight: .black, design: .rounded))
-                    .foregroundStyle(.black)
-                    .frame(maxWidth: .infinity, minHeight: 56)
-                    .background(.mint, in: RoundedRectangle(cornerRadius: 8))
-            }
-            .buttonStyle(.plain)
-
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .panelStyle()
-    }
-
-    private func answerColor(_ answer: String, question: TriviaQuestion) -> Color {
-        guard let selected = viewModel.selectedAnswer else { return .mint.opacity(0.22) }
-        if answer == question.correctAnswer { return .green.opacity(0.55) }
-        if answer == selected { return .red.opacity(0.55) }
-        return .white.opacity(0.10)
     }
 }
 
@@ -1067,54 +425,51 @@ struct StatsView: View {
     @EnvironmentObject private var sessionStore: SessionStore
 
     var body: some View {
-        ZStack {
-            PlayHubBackground()
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    HStack(spacing: 12) {
-                        StatCard(title: "Sessions", value: "\(sessionStore.sessions.count)", tint: .cyan)
-                        StatCard(title: "Total", value: "\(sessionStore.totalScore)", tint: .orange)
-                        StatCard(title: "Best", value: "\(sessionStore.bestSession?.score ?? 0)", tint: .yellow)
-                    }
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Scores by Mode")
-                            .font(.system(size: 22, weight: .black, design: .rounded))
-                            .foregroundStyle(.white)
-
-                        Chart(sessionStore.allStats) { stat in
-                            BarMark(
-                                x: .value("Mode", stat.mode.displayTitle),
-                                y: .value("Total Score", stat.totalScore)
-                            )
-                            .foregroundStyle(by: .value("Mode", stat.mode.displayTitle))
-                        }
-                        .frame(height: 240)
-                        .chartXAxisLabel("Game Mode")
-                        .chartYAxisLabel("Total Score")
-                    }
-                    .panelStyle()
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Recent Games")
-                            .font(.system(size: 22, weight: .black, design: .rounded))
-                            .foregroundStyle(.white)
-
-                        if sessionStore.sessions.isEmpty {
-                            EmptyStateView(text: "Play a game to create your first session.")
-                        } else {
-                            ForEach(sessionStore.sessions.prefix(8)) { session in
-                                SessionRow(session: session)
-                            }
-                        }
-                    }
-                    .panelStyle()
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(spacing: 12) {
+                    StatCard(title: "Sessions", value: "\(sessionStore.sessions.count)", tint: .cyan)
+                    StatCard(title: "Total", value: "\(sessionStore.totalScore)", tint: .orange)
+                    StatCard(title: "Best", value: "\(sessionStore.bestSession?.score ?? 0)", tint: .yellow)
                 }
-                .padding(20)
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Scores by Game")
+                        .font(.system(size: 22, weight: .black, design: .rounded))
+                        .foregroundStyle(.white)
+
+                    Chart(sessionStore.allStats) { stat in
+                        BarMark(
+                            x: .value("Game", stat.game.title),
+                            y: .value("Total Score", stat.totalScore)
+                        )
+                        .foregroundStyle(by: .value("Game", stat.game.title))
+                    }
+                    .frame(height: 240)
+                    .chartXAxisLabel("Game")
+                    .chartYAxisLabel("Total Score")
+                }
+                .panelStyle()
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Recent Games")
+                        .font(.system(size: 22, weight: .black, design: .rounded))
+                        .foregroundStyle(.white)
+
+                    if sessionStore.sessions.isEmpty {
+                        EmptyStateView(text: "Play a game to create your first session.")
+                    } else {
+                        ForEach(sessionStore.sessions.reversed().prefix(8)) { session in
+                            SessionRow(session: session)
+                        }
+                    }
+                }
+                .panelStyle()
             }
+            .padding(20)
         }
         .navigationTitle("Stats")
+        .scrollContentBackground(.hidden)
     }
 }
 
@@ -1145,26 +500,26 @@ struct SessionRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: session.mode.symbolName)
+            Image(systemName: session.game.icon)
                 .foregroundStyle(.black)
                 .frame(width: 40, height: 40)
-                .background(session.mode.tint, in: RoundedRectangle(cornerRadius: 8))
+                .background(session.game.tint, in: RoundedRectangle(cornerRadius: 8))
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(session.mode.displayTitle)
+                Text(session.game.title)
                     .font(.system(size: 16, weight: .black, design: .rounded))
                     .foregroundStyle(.white)
 
                 Text(session.timestamp.formatted(date: .abbreviated, time: .shortened))
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(.white.opacity(0.58))
             }
 
             Spacer()
 
             Text("\(session.score)")
-                .font(.system(size: 22, weight: .black, design: .rounded))
-                .foregroundStyle(session.mode.tint)
+                .font(.system(size: 18, weight: .black, design: .rounded))
+                .foregroundStyle(session.game.tint)
         }
         .padding(12)
         .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
@@ -1175,42 +530,34 @@ struct SessionRow: View {
 
 struct SessionMapView: View {
     @EnvironmentObject private var sessionStore: SessionStore
+    @EnvironmentObject private var locationService: LocationService
+
     @State private var selectedSession: GameSession?
-    @State private var position: MapCameraPosition = .region(
-        MKCoordinateRegion(
-            center: CLLocationCoordinate2D(latitude: 6.9271, longitude: 79.8612),
-            span: MKCoordinateSpan(latitudeDelta: 0.12, longitudeDelta: 0.12)
-        )
-    )
+    @State private var position = MapCameraPosition.automatic
 
     var body: some View {
         ZStack(alignment: .bottom) {
             Map(position: $position) {
+                UserAnnotation()
+
                 ForEach(Array(sessionStore.sessions.enumerated()), id: \.element.id) { index, session in
-                    Annotation(session.mode.displayTitle, coordinate: mapCoordinate(for: session, index: index)) {
-                        Button {
-                            selectedSession = session
-                        } label: {
-                            VStack(spacing: 2) {
-                                Image(systemName: session.mode.symbolName)
-                                    .font(.system(size: 15, weight: .black))
-                                Text("\(session.score)")
-                                    .font(.system(size: 11, weight: .black, design: .rounded))
+                    if let coordinate = session.coordinate {
+                        Annotation(session.game.title, coordinate: mapCoordinate(for: session, coordinate: coordinate, index: index)) {
+                            Button {
+                                selectedSession = session
+                            } label: {
+                                SessionMapMarker(session: session)
                             }
-                            .foregroundStyle(.black)
-                            .padding(8)
-                            .background(session.mode.tint, in: RoundedRectangle(cornerRadius: 8))
-                            .shadow(radius: 6)
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             }
             .mapStyle(.standard(elevation: .realistic))
             .ignoresSafeArea(edges: .bottom)
 
-            if sessionStore.sessions.isEmpty {
-                EmptyStateView(text: "Completed sessions will appear as map pins.")
+            if sessionsWithLocation.isEmpty {
+                EmptyStateView(text: "Completed sessions will appear here after the iPhone provides a location.")
                     .padding(20)
             }
 
@@ -1220,21 +567,43 @@ struct SessionMapView: View {
             }
         }
         .navigationTitle("Map")
-        .onAppear(perform: fitMapToSessions)
+        .onAppear {
+            locationService.startLiveLocationUpdates()
+            fitMapToCurrentLocationOrSessions()
+        }
+        .onChange(of: locationService.latestLocationDate) { _, _ in
+            fitMapToCurrentLocationOrSessions()
+        }
         .onChange(of: sessionStore.sessions) { _, _ in
+            fitMapToCurrentLocationOrSessions()
+        }
+    }
+
+    private func fitMapToCurrentLocationOrSessions() {
+        if let coordinate = locationService.currentCoordinate {
+            position = .region(
+                MKCoordinateRegion(
+                    center: coordinate,
+                    span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
+                )
+            )
+        } else {
             fitMapToSessions()
         }
     }
 
     private func fitMapToSessions() {
-        guard !sessionStore.sessions.isEmpty else { return }
+        let locatedSessions = sessionsWithLocation
+        guard !locatedSessions.isEmpty else { return }
 
-        let latitudes = sessionStore.sessions.map(\.latitude)
-        let longitudes = sessionStore.sessions.map(\.longitude)
-        let minimumLatitude = latitudes.min() ?? 6.9271
-        let maximumLatitude = latitudes.max() ?? 6.9271
-        let minimumLongitude = longitudes.min() ?? 79.8612
-        let maximumLongitude = longitudes.max() ?? 79.8612
+        let latitudes = locatedSessions.compactMap(\.latitude)
+        let longitudes = locatedSessions.compactMap(\.longitude)
+        guard let minimumLatitude = latitudes.min(),
+              let maximumLatitude = latitudes.max(),
+              let minimumLongitude = longitudes.min(),
+              let maximumLongitude = longitudes.max() else {
+            return
+        }
 
         let center = CLLocationCoordinate2D(
             latitude: (minimumLatitude + maximumLatitude) / 2,
@@ -1251,21 +620,40 @@ struct SessionMapView: View {
         )
     }
 
-    private func mapCoordinate(for session: GameSession, index: Int) -> CLLocationCoordinate2D {
+    private var sessionsWithLocation: [GameSession] {
+        sessionStore.sessions.filter { $0.coordinate != nil }
+    }
+
+    private func mapCoordinate(for session: GameSession, coordinate: CLLocationCoordinate2D, index: Int) -> CLLocationCoordinate2D {
         let duplicateCount = sessionStore.sessions[..<min(index, sessionStore.sessions.count)]
             .filter { $0.latitude == session.latitude && $0.longitude == session.longitude }
             .count
 
-        // Map annotations at exactly the same coordinate overlap. Spread only
-        // duplicate visual pins by a few metres; the saved session keeps its
-        // original, accurate coordinate.
-        guard duplicateCount > 0 else { return session.coordinate }
+        guard duplicateCount > 0 else { return coordinate }
         let angle = Double(duplicateCount) * (.pi / 3)
         let offset = 0.00012
         return CLLocationCoordinate2D(
-            latitude: session.latitude + cos(angle) * offset,
-            longitude: session.longitude + sin(angle) * offset
+            latitude: coordinate.latitude + cos(angle) * offset,
+            longitude: coordinate.longitude + sin(angle) * offset
         )
+    }
+}
+
+struct SessionMapMarker: View {
+    let session: GameSession
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Image(systemName: session.game.icon)
+                .font(.system(size: 15, weight: .black))
+
+            Text("\(session.score)")
+                .font(.system(size: 11, weight: .black, design: .rounded))
+        }
+        .foregroundStyle(.black)
+        .padding(8)
+        .background(session.game.tint, in: RoundedRectangle(cornerRadius: 8))
+        .shadow(radius: 6)
     }
 }
 
@@ -1274,13 +662,13 @@ struct SessionMapCallout: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: session.mode.symbolName)
+            Image(systemName: session.game.icon)
                 .foregroundStyle(.black)
                 .frame(width: 44, height: 44)
-                .background(session.mode.tint, in: RoundedRectangle(cornerRadius: 8))
+                .background(session.game.tint, in: RoundedRectangle(cornerRadius: 8))
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(session.mode.displayTitle)
+                Text(session.game.title)
                     .font(.system(size: 17, weight: .black, design: .rounded))
                     .foregroundStyle(.white)
 
@@ -1317,38 +705,39 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        ZStack {
-            PlayHubBackground()
+        Form {
+            Section("Daily Reminder") {
+                Toggle("Enable Notifications", isOn: $notificationsEnabled)
 
-            Form {
-                Section("Daily Reminder") {
-                    Toggle("Enable Notifications", isOn: $notificationsEnabled)
+                DatePicker("Reminder Time", selection: reminderDate, displayedComponents: .hourAndMinute)
 
-                    DatePicker("Reminder Time", selection: reminderDate, displayedComponents: .hourAndMinute)
+                Text(notificationService.statusMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
 
-                    Text(notificationService.statusMessage)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+            Section("Location") {
+                Button("Enable Location for New Scores") {
+                    locationService.requestPermissionIfConfigured()
                 }
 
-                Section("Location") {
-                    Button("Enable Location for New Scores") {
-                        locationService.requestPermissionIfConfigured()
-                    }
+                LabeledContent("Permission", value: locationService.authorizationStatusText)
+                LabeledContent("Accuracy", value: locationService.accuracyAuthorizationText)
+                LabeledContent("Current Fix", value: locationService.accuracySummary)
+                LabeledContent("Coordinate", value: locationService.coordinateSummary)
 
-                    Text(locationService.authorizationMessage)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
+                Text(locationService.authorizationMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
 
-                Section("Stats") {
-                    Button("Reset All Stats", role: .destructive) {
-                        isShowingResetConfirmation = true
-                    }
+            Section("Stats") {
+                Button("Reset All Stats", role: .destructive) {
+                    isShowingResetConfirmation = true
                 }
             }
-            .scrollContentBackground(.hidden)
         }
+        .scrollContentBackground(.hidden)
         .navigationTitle("Settings")
         .onChange(of: notificationsEnabled) { _, isEnabled in
             Task {
@@ -1375,107 +764,7 @@ struct SettingsView: View {
     }
 }
 
-// MARK: - Shared Views
-
-struct ResultView: View {
-    let session: GameSession
-    let playAgain: () -> Void
-    let exit: () -> Void
-
-    var body: some View {
-        VStack(spacing: 18) {
-            Spacer()
-
-            Image(systemName: "trophy.fill")
-                .font(.system(size: 58, weight: .black))
-                .foregroundStyle(.yellow)
-                .shadow(color: .yellow.opacity(0.6), radius: 18)
-
-            Text("Result Saved")
-                .font(.system(size: 34, weight: .black, design: .rounded))
-                .foregroundStyle(.white)
-
-            Text("\(session.mode.displayTitle) score: \(session.score)")
-                .font(.system(size: 22, weight: .bold, design: .rounded))
-                .foregroundStyle(session.mode.tint)
-
-            ShareLink(item: session.shareText) {
-                Label("Share Score", systemImage: "square.and.arrow.up")
-                    .font(.system(size: 17, weight: .black, design: .rounded))
-                    .foregroundStyle(.black)
-                    .frame(maxWidth: 280, minHeight: 54)
-                    .background(.cyan, in: RoundedRectangle(cornerRadius: 8))
-            }
-
-            Button(action: playAgain) {
-                Text("Play Again")
-                    .font(.system(size: 17, weight: .black, design: .rounded))
-                    .foregroundStyle(.black)
-                    .frame(maxWidth: 280, minHeight: 54)
-                    .background(session.mode.tint, in: RoundedRectangle(cornerRadius: 8))
-            }
-            .buttonStyle(.plain)
-
-            Button(action: exit) {
-                Text("Back to Home")
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: 280, minHeight: 50)
-                    .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
-            }
-            .buttonStyle(.plain)
-
-            Spacer()
-        }
-        .frame(maxWidth: .infinity)
-        .panelStyle()
-    }
-}
-
-struct GameTopBar: View {
-    let title: String
-    let symbol: String
-    let tint: Color
-
-    var body: some View {
-        HStack {
-            Text(title)
-                .font(.system(size: 24, weight: .black, design: .rounded))
-                .foregroundStyle(.white)
-
-            Spacer()
-
-            Image(systemName: symbol)
-                .font(.system(size: 20, weight: .black))
-                .foregroundStyle(.black)
-                .frame(width: 44, height: 44)
-                .background(tint, in: RoundedRectangle(cornerRadius: 8))
-        }
-    }
-}
-
-struct ScoreBadge: View {
-    let title: String
-    let value: String
-    let tint: Color
-
-    var body: some View {
-        VStack(spacing: 6) {
-            Text(title.uppercased())
-                .font(.system(size: 11, weight: .black, design: .monospaced))
-                .foregroundStyle(tint)
-
-            Text(value)
-                .font(.system(size: 22, weight: .black, design: .rounded))
-                .foregroundStyle(.white)
-                .minimumScaleFactor(0.6)
-                .lineLimit(1)
-        }
-        .frame(maxWidth: .infinity, minHeight: 82)
-        .background(.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(tint.opacity(0.45), lineWidth: 1))
-    }
-}
+// MARK: - Shared View Helpers
 
 struct EmptyStateView: View {
     let text: String
@@ -1487,35 +776,6 @@ struct EmptyStateView: View {
             .multilineTextAlignment(.center)
             .frame(maxWidth: .infinity, minHeight: 88)
             .background(.black.opacity(0.44), in: RoundedRectangle(cornerRadius: 8))
-    }
-}
-
-struct PlayHubBackground: View {
-    var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.02, green: 0.03, blue: 0.08),
-                    Color(red: 0.05, green: 0.08, blue: 0.12),
-                    Color(red: 0.10, green: 0.03, blue: 0.10)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-
-            GeometryReader { geometry in
-                ForEach(0..<18, id: \.self) { index in
-                    Circle()
-                        .fill(index.isMultiple(of: 3) ? .cyan.opacity(0.85) : .white.opacity(0.7))
-                        .frame(width: index.isMultiple(of: 4) ? 4 : 2, height: index.isMultiple(of: 4) ? 4 : 2)
-                        .position(
-                            x: CGFloat((index * 47) % 100) / 100 * geometry.size.width,
-                            y: CGFloat((index * 29) % 100) / 100 * geometry.size.height
-                        )
-                }
-            }
-        }
-        .ignoresSafeArea()
     }
 }
 

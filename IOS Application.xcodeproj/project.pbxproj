@@ -6,6 +6,20 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildRule section */
+		DCA93E73300F740C006BBAA0 /* PBXBuildRule */ = {
+			isa = PBXBuildRule;
+			compilerSpec = com.apple.compilers.proxy.script;
+			fileType = image.png;
+			inputFiles = (
+			);
+			isEditable = 1;
+			outputFiles = (
+			);
+			script = "# <com.apple.build-tasks.copy-png-file>\n";
+		};
+/* End PBXBuildRule section */
+
 /* Begin PBXFileReference section */
 		DC906B542FF561020040FABB /* IOS Application.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "IOS Application.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -118,6 +132,7 @@
 				DC906B522FF561020040FABB /* Resources */,
 			);
 			buildRules = (
+				DCA93E73300F740C006BBAA0 /* PBXBuildRule */,
 			);
 			dependencies = (
 			);
@@ -319,6 +334,10 @@
 				DEVELOPMENT_TEAM = X72UA4TN98;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "";
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "We need to location to display game location";
+				INFOPLIST_KEY_NSLocationAlwaysUsageDescription = "This app users the location of the game that the user is played the games";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "PlayHub uses your location to save game scores with accurate map pins.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -351,6 +370,10 @@
 				DEVELOPMENT_TEAM = X72UA4TN98;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "";
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "We need to location to display game location";
+				INFOPLIST_KEY_NSLocationAlwaysUsageDescription = "This app users the location of the game that the user is played the games";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "PlayHub uses your location to save game scores with accurate map pins.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
