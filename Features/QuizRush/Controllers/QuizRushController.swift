@@ -38,7 +38,15 @@ final class QuizRushController: ObservableObject {
             return "Choose one answer. Correct answers give 1 mark."
         }
 
-        return answerWasCorrect ? "Correct: +1 mark" : "Wrong: +0 marks"
+        if answerWasCorrect {
+            return "Correct: +1 mark"
+        }
+
+        guard let currentQuestion else {
+            return "Wrong: +0 marks"
+        }
+
+        return "Wrong: +0 marks. Correct answer: \(currentQuestion.correctAnswer)"
     }
 
     func startRound() {
@@ -94,7 +102,7 @@ final class QuizRushController: ObservableObject {
             streak = 0
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.25) { [weak self] in
             self?.advanceQuestion()
         }
     }

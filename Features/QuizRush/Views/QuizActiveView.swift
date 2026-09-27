@@ -29,7 +29,10 @@ struct QuizActiveView: View {
             Text(controller.answerFeedbackText)
                 .font(.system(size: 15, weight: .black, design: .rounded))
                 .foregroundStyle(controller.answerWasCorrect == false ? .red : .green)
-                .frame(maxWidth: .infinity, minHeight: 30)
+                .multilineTextAlignment(.center)
+                .minimumScaleFactor(0.82)
+                .padding(.horizontal, 12)
+                .frame(maxWidth: .infinity, minHeight: 44)
                 .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
 
             if let question = controller.currentQuestion {
